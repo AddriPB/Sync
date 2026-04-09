@@ -59,6 +59,7 @@ const WEEK_HOURS = Array.from({ length: 17 }, (_, index) => (index === 16 ? "00h
 const DAY_START_MINUTES = 8 * 60;
 const DAY_END_MINUTES = 24 * 60;
 const DAY_RANGE_MINUTES = DAY_END_MINUTES - DAY_START_MINUTES;
+const WEEK_HEADER_HEIGHT = 42;
 
 const navItems: Array<{ id: CalendarView; label: string; icon: typeof Clock3 }> = [
   { id: "planning", label: "Planning", icon: Clock3 },
@@ -73,6 +74,7 @@ export function SyncApp() {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [showComposer, setShowComposer] = useState(false);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
+  const [createDraft, setCreateDraft] = useState<EventFormValues | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [sourceConnections, setSourceConnections] = useState<ExternalSourceConnection[]>([]);
   const [onSiteDates, setOnSiteDates] = useState<string[]>([]);
@@ -101,11 +103,14 @@ export function SyncApp() {
     if (selectedEvent) {
       return toEventFormValues(selectedEvent);
     }
+    if (createDraft) {
+      return createDraft;
+    }
     return {
       ...getDefaultEventForm(selectedDate),
       colorId: colorPresets[0]?.id ?? getDefaultEventForm(selectedDate).colorId
     };
-  }, [selectedDate, selectedEvent, colorPresets]);
+  }, [selectedDate, selectedEvent, createDraft, colorPresets]);
 
   async function refreshData(userId = session?.userId) {
     if (!userId) {
@@ -138,13 +143,19 @@ export function SyncApp() {
     setShowSettings(false);
   }
 
-  function handleCreate() {
+  function handleCreate(defaults?: Partial<EventFormValues>) {
     setEditingEventId(null);
+    setCreateDraft({
+      ...getDefaultEventForm(selectedDate),
+      colorId: colorPresets[0]?.id ?? getDefaultEventForm(selectedDate).colorId,
+      ...defaults
+    });
     setShowComposer(true);
   }
 
   function handleEdit(event: CalendarEvent) {
     setEditingEventId(event.id);
+    setCreateDraft(null);
     setShowComposer(true);
   }
 
@@ -156,6 +167,7 @@ export function SyncApp() {
     await refreshData();
     setShowComposer(false);
     setEditingEventId(null);
+    setCreateDraft(null);
     setSelectedDate(values.startDate);
   }
 
@@ -164,6 +176,7 @@ export function SyncApp() {
     await refreshData();
     setShowComposer(false);
     setEditingEventId(null);
+    setCreateDraft(null);
   }
 
   async function handleToggleOnSite(date: string) {
@@ -250,7 +263,7 @@ export function SyncApp() {
             <WeekView
               events={events}
               selectedDate={selectedDate}
-              onSelectDate={setSelectedDate}
+              onCreateEvent={handleCreate}
               onEditEvent={handleEdit}
               onSiteDates={onSiteDates}
               onToggleOnSite={handleToggleOnSite}
@@ -261,7 +274,7 @@ export function SyncApp() {
             <MonthView
               events={events}
               selectedDate={selectedDate}
-              onSelectDate={setSelectedDate}
+              onCreateEvent={handleCreate}
               onEditEvent={handleEdit}
               onSiteDates={onSiteDates}
               onToggleOnSite={handleToggleOnSite}
@@ -286,9 +299,11 @@ export function SyncApp() {
           })}
         </nav>
 
-        <button className="fab" onClick={handleCreate} aria-label="Ajouter un événement">
-          <Plus size={24} />
-        </button>
+        {view === "planning" ? (
+          <button className="fab" onClick={() => handleCreate()} aria-label="Ajouter un événement">
+            <Plus size={24} />
+          </button>
+        ) : null}
 
         {showComposer ? (
           <EventSheet
@@ -300,6 +315,7 @@ export function SyncApp() {
             onClose={() => {
               setShowComposer(false);
               setEditingEventId(null);
+              setCreateDraft(null);
             }}
             onDelete={handleDelete}
             onSave={handleSave}
@@ -623,7 +639,7 @@ function PlanningDayCard({
 function WeekView({
   events,
   selectedDate,
-  onSelectDate,
+  onCreateEvent,
   onEditEvent,
   onSiteDates,
   onToggleOnSite,
@@ -631,7 +647,7 @@ function WeekView({
 }: {
   events: CalendarEvent[];
   selectedDate: string;
-  onSelectDate: (date: string) => void;
+  onCreateEvent: (defaults?: Partial<EventFormValues>) => void;
   onEditEvent: (event: CalendarEvent) => void;
   onSiteDates: string[];
   onToggleOnSite: (date: string) => void;
@@ -661,7 +677,7 @@ function WeekView({
                 events={dayEvents}
                 active={selectedDate === dateKey}
                 onSite={onSiteDates.includes(dateKey)}
-                onSelectDate={onSelectDate}
+                onCreateEvent={onCreateEvent}
                 onEditEvent={onEditEvent}
                 onToggleOnSite={onToggleOnSite}
                 colorPresets={colorPresets}
@@ -680,7 +696,7 @@ function WeekDayColumn({
   events,
   active,
   onSite,
-  onSelectDate,
+  onCreateEvent,
   onEditEvent,
   onToggleOnSite,
   colorPresets
@@ -690,7 +706,7 @@ function WeekDayColumn({
   events: CalendarEvent[];
   active: boolean;
   onSite: boolean;
-  onSelectDate: (date: string) => void;
+  onCreateEvent: (defaults?: Partial<EventFormValues>) => void;
   onEditEvent: (event: CalendarEvent) => void;
   onToggleOnSite: (date: string) => void;
   colorPresets: ColorPreset[];
@@ -700,11 +716,12 @@ function WeekDayColumn({
   return (
     <article
       className={getDaySurfaceClass("week-column", active, onSite, longPress.isPressing)}
-      onClick={() => {
+      onClick={(clickEvent) => {
         if (longPress.consumeLongPress()) {
           return;
         }
-        onSelectDate(dateKey);
+        const defaults = getWeekCreateDefaults(dateKey, clickEvent.currentTarget.getBoundingClientRect(), clickEvent.clientY);
+        onCreateEvent(defaults);
       }}
       {...longPress.handlers}
     >
@@ -749,7 +766,7 @@ function WeekDayColumn({
 function MonthView({
   events,
   selectedDate,
-  onSelectDate,
+  onCreateEvent,
   onEditEvent,
   onSiteDates,
   onToggleOnSite,
@@ -757,7 +774,7 @@ function MonthView({
 }: {
   events: CalendarEvent[];
   selectedDate: string;
-  onSelectDate: (date: string) => void;
+  onCreateEvent: (defaults?: Partial<EventFormValues>) => void;
   onEditEvent: (event: CalendarEvent) => void;
   onSiteDates: string[];
   onToggleOnSite: (date: string) => void;
@@ -780,7 +797,7 @@ function MonthView({
               dayEvents={dayEvents}
               selectedDate={selectedDate}
               onSite={onSiteDates.includes(dateKey)}
-              onSelectDate={onSelectDate}
+              onCreateEvent={onCreateEvent}
               onToggleOnSite={onToggleOnSite}
               colorPresets={colorPresets}
             />
@@ -821,7 +838,7 @@ function MonthCell({
   dayEvents,
   selectedDate,
   onSite,
-  onSelectDate,
+  onCreateEvent,
   onToggleOnSite,
   colorPresets
 }: {
@@ -830,7 +847,7 @@ function MonthCell({
   dayEvents: CalendarEvent[];
   selectedDate: string;
   onSite: boolean;
-  onSelectDate: (date: string) => void;
+  onCreateEvent: (defaults?: Partial<EventFormValues>) => void;
   onToggleOnSite: (date: string) => void;
   colorPresets: ColorPreset[];
 }) {
@@ -845,7 +862,10 @@ function MonthCell({
         if (longPress.consumeLongPress()) {
           return;
         }
-        onSelectDate(dateKey);
+        onCreateEvent({
+          startDate: dateKey,
+          endDate: dateKey
+        });
       }}
       {...longPress.handlers}
     >
@@ -1303,4 +1323,27 @@ function getWeekEventStyle(event: CalendarEvent, dateKey: string) {
     top: `${top}%`,
     height: `${height}%`
   };
+}
+
+function getWeekCreateDefaults(dateKey: string, rect: DOMRect, clientY: number): Partial<EventFormValues> {
+  const usableHeight = Math.max(rect.height - WEEK_HEADER_HEIGHT, 1);
+  const relativeY = Math.min(Math.max(clientY - rect.top - WEEK_HEADER_HEIGHT, 0), usableHeight);
+  const ratio = relativeY / usableHeight;
+  const totalMinutes = DAY_START_MINUTES + ratio * DAY_RANGE_MINUTES;
+  const roundedQuarter = Math.round(totalMinutes / 15) * 15;
+  const startMinutes = Math.min(Math.max(roundedQuarter, DAY_START_MINUTES), DAY_END_MINUTES - 15);
+  const endMinutes = Math.min(startMinutes + 60, DAY_END_MINUTES);
+
+  return {
+    startDate: dateKey,
+    endDate: dateKey,
+    startTime: minutesToTimeString(startMinutes),
+    endTime: minutesToTimeString(endMinutes)
+  };
+}
+
+function minutesToTimeString(totalMinutes: number) {
+  const hours = Math.floor(totalMinutes / 60) % 24;
+  const minutes = totalMinutes % 60;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
 }
