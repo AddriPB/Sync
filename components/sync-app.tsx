@@ -52,6 +52,7 @@ type AuthMode = "login" | "signup";
 
 const LONG_PRESS_MS = 420;
 const SWIPE_THRESHOLD = 54;
+const SHEET_CLOSE_THRESHOLD = 88;
 const WEEK_HOURS = Array.from({ length: 17 }, (_, index) => (index === 16 ? "00h" : `${String(index + 8).padStart(2, "0")}h`));
 const DAY_START_MINUTES = 8 * 60;
 const DAY_END_MINUTES = 24 * 60;
@@ -407,6 +408,42 @@ function useLongPressAction(action: () => void) {
       const value = didLongPress.current;
       didLongPress.current = false;
       return value;
+    }
+  };
+}
+
+function useSheetDismiss(onClose: () => void) {
+  const startY = useRef<number | null>(null);
+  const [dragOffset, setDragOffset] = useState(0);
+
+  function onStart(event: React.TouchEvent<HTMLDivElement>) {
+    startY.current = event.touches[0].clientY;
+    setDragOffset(0);
+  }
+
+  function onMove(event: React.TouchEvent<HTMLDivElement>) {
+    if (startY.current === null) {
+      return;
+    }
+    const deltaY = event.touches[0].clientY - startY.current;
+    setDragOffset(deltaY > 0 ? deltaY : 0);
+  }
+
+  function onEnd() {
+    if (dragOffset >= SHEET_CLOSE_THRESHOLD) {
+      onClose();
+    }
+    startY.current = null;
+    setDragOffset(0);
+  }
+
+  return {
+    dragOffset,
+    gestureHandlers: {
+      onTouchStart: onStart,
+      onTouchMove: onMove,
+      onTouchEnd: onEnd,
+      onTouchCancel: onEnd
     }
   };
 }
@@ -939,6 +976,7 @@ function EventSheet({
   const canSubmit = !errors.title && !errors.startDate && !errors.endDate;
   const suggestions = [...historySuggestions, ...remoteSuggestions].slice(0, 6);
   const readonlyExternal = event ? event.source !== "sync" : false;
+  const sheetDismiss = useSheetDismiss(onClose);
 
   async function handleSubmit() {
     if (!canSubmit || readonlyExternal || saving) {
@@ -957,8 +995,11 @@ function EventSheet({
 
   return (
     <div className="overlay">
-      <section className="sheet">
+      <section className="sheet" style={{ transform: `translateY(${sheetDismiss.dragOffset}px)` }}>
         <header className="sheet-header">
+          <div className="sheet-grabber-zone" {...sheetDismiss.gestureHandlers}>
+            <div className="sheet-grabber" />
+          </div>
           <div>
             <p className="eyebrow">{mode === "create" ? "Nouvel événement" : "Modifier l'événement"}</p>
             <h2>{readonlyExternal ? "Lecture seule" : mode === "create" ? "Créer" : "Modifier"}</h2>
@@ -1113,11 +1154,15 @@ function SettingsSheet({
 }) {
   const [showColorLibrary, setShowColorLibrary] = useState(false);
   const [pendingDeleteColorId, setPendingDeleteColorId] = useState<string | null>(null);
+  const sheetDismiss = useSheetDismiss(onClose);
 
   return (
     <div className="overlay">
-      <section className="sheet">
+      <section className="sheet" style={{ transform: `translateY(${sheetDismiss.dragOffset}px)` }}>
         <header className="sheet-header">
+          <div className="sheet-grabber-zone" {...sheetDismiss.gestureHandlers}>
+            <div className="sheet-grabber" />
+          </div>
           <div>
             <p className="eyebrow">Paramétrages</p>
             <h2>@{username}</h2>
@@ -1231,10 +1276,15 @@ function ColorLibrarySheet({
   onClose: () => void;
   onSelectColor: (preset: ColorPreset) => void;
 }) {
+  const sheetDismiss = useSheetDismiss(onClose);
+
   return (
     <div className="overlay overlay-nested">
-      <section className="sheet sheet-large">
+      <section className="sheet sheet-large" style={{ transform: `translateY(${sheetDismiss.dragOffset}px)` }}>
         <header className="sheet-header">
+          <div className="sheet-grabber-zone" {...sheetDismiss.gestureHandlers}>
+            <div className="sheet-grabber" />
+          </div>
           <div>
             <p className="eyebrow">Palette</p>
             <h2>Ajouter une couleur</h2>
