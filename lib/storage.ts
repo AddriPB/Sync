@@ -19,15 +19,17 @@ import {
   setDoc,
   where
 } from "firebase/firestore";
-import { DEFAULT_COLOR_ID } from "@/lib/colors";
+import { DEFAULT_COLOR_ID, DEFAULT_USER_COLOR_PRESETS, getColorPresetById } from "@/lib/colors";
 import { todayIso } from "@/lib/date";
 import { auth, db } from "@/lib/firebase";
 import type {
   CalendarEvent,
+  ColorPreset,
   EventFormValues,
   ExternalSourceConnection,
   Session,
-  StoredUser
+  StoredUser,
+  UserMeta
 } from "@/lib/types";
 
 const USER_META_COLLECTION = "userMeta";
@@ -50,12 +52,6 @@ const seedSources: ExternalSourceConnection[] = [
   }
 ];
 
-type UserMeta = {
-  locations: string[];
-  sources: ExternalSourceConnection[];
-  onSiteDates: string[];
-};
-
 function normalizeUsername(username: string) {
   return username.trim().toLowerCase();
 }
@@ -70,14 +66,16 @@ async function getUserMeta(userId: string): Promise<UserMeta> {
     return {
       locations: [],
       sources: seedSources,
-      onSiteDates: []
+      onSiteDates: [],
+      colorPresets: DEFAULT_USER_COLOR_PRESETS
     };
   }
   const data = snapshot.data() as Partial<UserMeta>;
   return {
     locations: data.locations ?? [],
     sources: data.sources ?? seedSources,
-    onSiteDates: data.onSiteDates ?? []
+    onSiteDates: data.onSiteDates ?? [],
+    colorPresets: data.colorPresets?.length ? data.colorPresets : DEFAULT_USER_COLOR_PRESETS
   };
 }
 
@@ -185,7 +183,8 @@ export async function signUp(username: string, password: string): Promise<Sessio
       transaction.set(doc(db, USER_META_COLLECTION, userId), {
         locations: [],
         sources: seedSources,
-        onSiteDates: []
+        onSiteDates: [],
+        colorPresets: DEFAULT_USER_COLOR_PRESETS
       });
       transaction.set(usernameRef, {
         uid: userId,
@@ -293,6 +292,46 @@ export async function rememberLocation(userId: string, location: string) {
 export async function getExternalSourceConnections(userId: string) {
   const meta = await getUserMeta(userId);
   return meta.sources;
+}
+
+export async function getColorPresets(userId: string) {
+  const meta = await getUserMeta(userId);
+  return meta.colorPresets;
+}
+
+export async function addColorPreset(userId: string, preset: ColorPreset) {
+  const meta = await getUserMeta(userId);
+  if (meta.colorPresets.some((entry) => entry.id === preset.id)) {
+    return meta.colorPresets;
+  }
+  const nextPresets = [...meta.colorPresets, preset];
+  await setUserMeta(userId, { colorPresets: nextPresets });
+  return nextPresets;
+}
+
+export async function removeColorPreset(userId: string, colorId: string) {
+  const meta = await getUserMeta(userId);
+  if (meta.colorPresets.length <= 1) {
+    return meta.colorPresets;
+  }
+
+  const nextPresets = meta.colorPresets.filter((preset) => preset.id !== colorId);
+  const fallbackColorId = nextPresets[0]?.id ?? DEFAULT_COLOR_ID;
+  const userEvents = await getEvents(userId);
+  const impactedEvents = userEvents.filter((event) => event.colorId === colorId);
+
+  await Promise.all(
+    impactedEvents.map((event) =>
+      setDoc(doc(db, EVENTS_COLLECTION, event.id), {
+        ...event,
+        colorId: getColorPresetById(fallbackColorId, nextPresets).id,
+        updatedAt: new Date().toISOString()
+      })
+    )
+  );
+
+  await setUserMeta(userId, { colorPresets: nextPresets });
+  return nextPresets;
 }
 
 export async function getOnSiteDates(userId: string) {

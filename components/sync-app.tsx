@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { CalendarDays, Clock3, Grid2x2, MapPin, Plus, Settings2, Trash2 } from "lucide-react";
 import { format, isSameMonth, isToday as isTodayDateFns, parseISO, startOfWeek } from "date-fns";
 import { fr } from "date-fns/locale";
-import { COLOR_PRESETS } from "@/lib/colors";
+import { COLOR_LIBRARY, getColorPresetById } from "@/lib/colors";
 import {
   formatDayLabel,
   formatMonthTitle,
@@ -22,7 +22,9 @@ import {
 } from "@/lib/date";
 import { fetchLocationSuggestions } from "@/lib/location";
 import {
+  addColorPreset,
   deleteEvent,
+  getColorPresets,
   getDefaultEventForm,
   getEvents,
   getExternalSourceConnections,
@@ -30,6 +32,7 @@ import {
   getRememberedLocations,
   getSession,
   observeSession,
+  removeColorPreset,
   saveEvent,
   signIn,
   signOut,
@@ -41,6 +44,7 @@ import {
 import type {
   CalendarEvent,
   CalendarView,
+  ColorPreset,
   EventFormValues,
   ExternalSourceConnection,
   LocationSuggestion,
@@ -72,6 +76,7 @@ export function SyncApp() {
   const [showSettings, setShowSettings] = useState(false);
   const [sourceConnections, setSourceConnections] = useState<ExternalSourceConnection[]>([]);
   const [onSiteDates, setOnSiteDates] = useState<string[]>([]);
+  const [colorPresets, setColorPresets] = useState<ColorPreset[]>([]);
   const swipeStart = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
@@ -92,20 +97,30 @@ export function SyncApp() {
     [editingEventId, events]
   );
 
-  const composerDefaults = selectedEvent ? toEventFormValues(selectedEvent) : getDefaultEventForm(selectedDate);
+  const composerDefaults = useMemo(() => {
+    if (selectedEvent) {
+      return toEventFormValues(selectedEvent);
+    }
+    return {
+      ...getDefaultEventForm(selectedDate),
+      colorId: colorPresets[0]?.id ?? getDefaultEventForm(selectedDate).colorId
+    };
+  }, [selectedDate, selectedEvent, colorPresets]);
 
   async function refreshData(userId = session?.userId) {
     if (!userId) {
       return;
     }
-    const [nextEvents, nextSources, nextOnSiteDates] = await Promise.all([
+    const [nextEvents, nextSources, nextOnSiteDates, nextColorPresets] = await Promise.all([
       getEvents(userId),
       getExternalSourceConnections(userId),
-      getOnSiteDates(userId)
+      getOnSiteDates(userId),
+      getColorPresets(userId)
     ]);
     setEvents(sortEvents(nextEvents));
     setSourceConnections(nextSources);
     setOnSiteDates(nextOnSiteDates);
+    setColorPresets(nextColorPresets);
   }
 
   async function handleAuthenticate(mode: AuthMode, username: string, password: string) {
@@ -118,6 +133,7 @@ export function SyncApp() {
     setSession(null);
     setEvents([]);
     setOnSiteDates([]);
+    setColorPresets([]);
     setShowComposer(false);
     setShowSettings(false);
   }
@@ -217,6 +233,7 @@ export function SyncApp() {
               onEditEvent={handleEdit}
               onSiteDates={onSiteDates}
               onToggleOnSite={handleToggleOnSite}
+              colorPresets={colorPresets}
             />
           ) : null}
           {view === "week" ? (
@@ -227,6 +244,7 @@ export function SyncApp() {
               onEditEvent={handleEdit}
               onSiteDates={onSiteDates}
               onToggleOnSite={handleToggleOnSite}
+              colorPresets={colorPresets}
             />
           ) : null}
           {view === "month" ? (
@@ -237,6 +255,7 @@ export function SyncApp() {
               onEditEvent={handleEdit}
               onSiteDates={onSiteDates}
               onToggleOnSite={handleToggleOnSite}
+              colorPresets={colorPresets}
             />
           ) : null}
         </section>
@@ -265,6 +284,7 @@ export function SyncApp() {
           <EventSheet
             mode={selectedEvent ? "edit" : "create"}
             currentUserId={session.userId}
+            colorPresets={colorPresets}
             initialValues={composerDefaults}
             event={selectedEvent}
             onClose={() => {
@@ -279,6 +299,7 @@ export function SyncApp() {
         {showSettings ? (
           <SettingsSheet
             connections={sourceConnections}
+            colorPresets={colorPresets}
             username={session.username}
             onClose={() => setShowSettings(false)}
             onSignOut={handleSignOut}
@@ -288,6 +309,23 @@ export function SyncApp() {
               }
               void updateExternalSource(session.userId, source, enabled).then(() => {
                 void refreshData(session.userId);
+              });
+            }}
+            onAddColor={(preset) => {
+              if (!session) {
+                return;
+              }
+              void addColorPreset(session.userId, preset).then((nextPresets) => {
+                setColorPresets(nextPresets);
+              });
+            }}
+            onRemoveColor={(colorId) => {
+              if (!session) {
+                return;
+              }
+              void removeColorPreset(session.userId, colorId).then(async (nextPresets) => {
+                setColorPresets(nextPresets);
+                await refreshData(session.userId);
               });
             }}
           />
@@ -451,7 +489,8 @@ function PlanningView({
   onSelectDate,
   onEditEvent,
   onSiteDates,
-  onToggleOnSite
+  onToggleOnSite,
+  colorPresets
 }: {
   events: CalendarEvent[];
   selectedDate: string;
@@ -459,6 +498,7 @@ function PlanningView({
   onEditEvent: (event: CalendarEvent) => void;
   onSiteDates: string[];
   onToggleOnSite: (date: string) => void;
+  colorPresets: ColorPreset[];
 }) {
   const dayKeys = getPlanningDays(events, selectedDate);
   const grouped = dayKeys.map((date) => ({
@@ -482,6 +522,7 @@ function PlanningView({
           onSelectDate={onSelectDate}
           onEditEvent={onEditEvent}
           onToggleOnSite={onToggleOnSite}
+          colorPresets={colorPresets}
         />
       ))}
     </section>
@@ -495,7 +536,8 @@ function PlanningDayCard({
   onSite,
   onSelectDate,
   onEditEvent,
-  onToggleOnSite
+  onToggleOnSite,
+  colorPresets
 }: {
   date: string;
   events: CalendarEvent[];
@@ -504,6 +546,7 @@ function PlanningDayCard({
   onSelectDate: (date: string) => void;
   onEditEvent: (event: CalendarEvent) => void;
   onToggleOnSite: (date: string) => void;
+  colorPresets: ColorPreset[];
 }) {
   const longPress = useLongPressAction(() => onToggleOnSite(date));
 
@@ -526,7 +569,7 @@ function PlanningDayCard({
       </header>
       <div className="planning-list">
         {events.map((event) => {
-          const color = COLOR_PRESETS.find((preset) => preset.id === event.colorId) ?? COLOR_PRESETS[0];
+          const color = getColorPresetById(event.colorId, colorPresets);
           return (
             <button
               key={`${date}-${event.id}`}
@@ -561,7 +604,8 @@ function WeekView({
   onSelectDate,
   onEditEvent,
   onSiteDates,
-  onToggleOnSite
+  onToggleOnSite,
+  colorPresets
 }: {
   events: CalendarEvent[];
   selectedDate: string;
@@ -569,6 +613,7 @@ function WeekView({
   onEditEvent: (event: CalendarEvent) => void;
   onSiteDates: string[];
   onToggleOnSite: (date: string) => void;
+  colorPresets: ColorPreset[];
 }) {
   const days = getWeekDays(selectedDate);
 
@@ -597,6 +642,7 @@ function WeekView({
                 onSelectDate={onSelectDate}
                 onEditEvent={onEditEvent}
                 onToggleOnSite={onToggleOnSite}
+                colorPresets={colorPresets}
               />
             );
           })}
@@ -614,7 +660,8 @@ function WeekDayColumn({
   onSite,
   onSelectDate,
   onEditEvent,
-  onToggleOnSite
+  onToggleOnSite,
+  colorPresets
 }: {
   date: Date;
   dateKey: string;
@@ -624,6 +671,7 @@ function WeekDayColumn({
   onSelectDate: (date: string) => void;
   onEditEvent: (event: CalendarEvent) => void;
   onToggleOnSite: (date: string) => void;
+  colorPresets: ColorPreset[];
 }) {
   const longPress = useLongPressAction(() => onToggleOnSite(dateKey));
 
@@ -649,7 +697,7 @@ function WeekDayColumn({
       </div>
       <div className="week-events-layer">
         {events.map((event) => {
-          const color = COLOR_PRESETS.find((preset) => preset.id === event.colorId) ?? COLOR_PRESETS[0];
+          const color = getColorPresetById(event.colorId, colorPresets);
           const style = getWeekEventStyle(event, dateKey);
           return (
             <button
@@ -682,7 +730,8 @@ function MonthView({
   onSelectDate,
   onEditEvent,
   onSiteDates,
-  onToggleOnSite
+  onToggleOnSite,
+  colorPresets
 }: {
   events: CalendarEvent[];
   selectedDate: string;
@@ -690,6 +739,7 @@ function MonthView({
   onEditEvent: (event: CalendarEvent) => void;
   onSiteDates: string[];
   onToggleOnSite: (date: string) => void;
+  colorPresets: ColorPreset[];
 }) {
   const days = getMonthGrid(selectedDate);
   const selectedEvents = events.filter((event) => selectedDate >= event.startDate && selectedDate <= event.endDate);
@@ -710,6 +760,7 @@ function MonthView({
               onSite={onSiteDates.includes(dateKey)}
               onSelectDate={onSelectDate}
               onToggleOnSite={onToggleOnSite}
+              colorPresets={colorPresets}
             />
           );
         })}
@@ -722,7 +773,7 @@ function MonthView({
         </header>
         <div className="month-detail-list month-detail-scroll">
           {selectedEvents.map((event) => {
-            const color = COLOR_PRESETS.find((preset) => preset.id === event.colorId) ?? COLOR_PRESETS[0];
+            const color = getColorPresetById(event.colorId, colorPresets);
             return (
               <button
                 key={event.id}
@@ -749,7 +800,8 @@ function MonthCell({
   selectedDate,
   onSite,
   onSelectDate,
-  onToggleOnSite
+  onToggleOnSite,
+  colorPresets
 }: {
   day: Date;
   dateKey: string;
@@ -758,6 +810,7 @@ function MonthCell({
   onSite: boolean;
   onSelectDate: (date: string) => void;
   onToggleOnSite: (date: string) => void;
+  colorPresets: ColorPreset[];
 }) {
   const longPress = useLongPressAction(() => onToggleOnSite(dateKey));
   const active = selectedDate === dateKey;
@@ -777,7 +830,7 @@ function MonthCell({
       <span className={isTodayDateFns(day) ? "today-chip" : "month-date"}>{format(day, "d")}</span>
       <div className="month-dots">
         {dayEvents.map((event) => {
-          const color = COLOR_PRESETS.find((preset) => preset.id === event.colorId) ?? COLOR_PRESETS[0];
+          const color = getColorPresetById(event.colorId, colorPresets);
           return <span key={event.id} className="month-dot" style={{ background: color.border }} />;
         })}
       </div>
@@ -788,6 +841,7 @@ function MonthCell({
 function EventSheet({
   mode,
   currentUserId,
+  colorPresets,
   initialValues,
   event,
   onClose,
@@ -796,6 +850,7 @@ function EventSheet({
 }: {
   mode: "create" | "edit";
   currentUserId: string;
+  colorPresets: ColorPreset[];
   initialValues: EventFormValues;
   event: CalendarEvent | null;
   onClose: () => void;
@@ -931,7 +986,7 @@ function EventSheet({
           ) : null}
 
           <div className="color-row">
-            {COLOR_PRESETS.map((preset) => (
+            {colorPresets.map((preset) => (
               <button
                 key={preset.id}
                 className={values.colorId === preset.id ? "color-swatch color-swatch-active" : "color-swatch"}
@@ -997,17 +1052,26 @@ function TimeSelect({
 
 function SettingsSheet({
   connections,
+  colorPresets,
   username,
   onClose,
   onSignOut,
-  onToggleSource
+  onToggleSource,
+  onAddColor,
+  onRemoveColor
 }: {
   connections: ExternalSourceConnection[];
+  colorPresets: ColorPreset[];
   username: string;
   onClose: () => void;
   onSignOut: () => void;
   onToggleSource: (source: ExternalSourceConnection["source"], enabled: boolean) => void;
+  onAddColor: (preset: ColorPreset) => void;
+  onRemoveColor: (colorId: string) => void;
 }) {
+  const [showColorLibrary, setShowColorLibrary] = useState(false);
+  const [pendingDeleteColorId, setPendingDeleteColorId] = useState<string | null>(null);
+
   return (
     <div className="overlay">
       <section className="sheet">
@@ -1022,6 +1086,33 @@ function SettingsSheet({
         </header>
 
         <div className="sheet-fields">
+          <div className="settings-card">
+            <div className="settings-card-head">
+              <div>
+                <h3>Couleurs</h3>
+                <p>Référentiel personnel utilisé dans les événements.</p>
+              </div>
+              <button className="icon-button" onClick={() => setShowColorLibrary(true)} aria-label="Ajouter une couleur">
+                <Plus size={18} />
+              </button>
+            </div>
+            <div className="settings-colors">
+              {colorPresets.map((preset) => (
+                <ColorPresetChip
+                  key={preset.id}
+                  preset={preset}
+                  pendingDelete={pendingDeleteColorId === preset.id}
+                  onLongPress={() => setPendingDeleteColorId(preset.id)}
+                  onConfirmDelete={() => {
+                    onRemoveColor(preset.id);
+                    setPendingDeleteColorId(null);
+                  }}
+                  onCancelDelete={() => setPendingDeleteColorId(null)}
+                />
+              ))}
+            </div>
+          </div>
+
           <div className="settings-card">
             <h3>Sources externes</h3>
             <p>Lecture seule, prêtes à être reliées à Apple anniversaires et Google invitations.</p>
@@ -1045,6 +1136,104 @@ function SettingsSheet({
             Déconnexion
           </button>
         </footer>
+
+        {showColorLibrary ? (
+          <ColorLibrarySheet
+            selectedIds={colorPresets.map((preset) => preset.id)}
+            onClose={() => setShowColorLibrary(false)}
+            onSelectColor={(preset) => {
+              onAddColor(preset);
+              setShowColorLibrary(false);
+            }}
+          />
+        ) : null}
+      </section>
+    </div>
+  );
+}
+
+function ColorPresetChip({
+  preset,
+  pendingDelete,
+  onLongPress,
+  onConfirmDelete,
+  onCancelDelete
+}: {
+  preset: ColorPreset;
+  pendingDelete: boolean;
+  onLongPress: () => void;
+  onConfirmDelete: () => void;
+  onCancelDelete: () => void;
+}) {
+  const longPress = useLongPressAction(onLongPress);
+
+  return (
+    <div className="settings-color-item">
+      <button
+        className="settings-color-chip"
+        style={{ background: preset.bg, borderColor: preset.border, color: preset.fg }}
+        onClick={() => {
+          if (longPress.consumeLongPress()) {
+            return;
+          }
+        }}
+        {...longPress.handlers}
+      >
+        <span className="settings-color-sample" style={{ background: preset.border }} />
+        <strong>{preset.label}</strong>
+      </button>
+      {pendingDelete ? (
+        <div className="settings-color-confirm">
+          <button className="danger-mini" onClick={onConfirmDelete}>
+            Confirmer
+          </button>
+          <button className="ghost-mini" onClick={onCancelDelete}>
+            Annuler
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function ColorLibrarySheet({
+  selectedIds,
+  onClose,
+  onSelectColor
+}: {
+  selectedIds: string[];
+  onClose: () => void;
+  onSelectColor: (preset: ColorPreset) => void;
+}) {
+  return (
+    <div className="overlay overlay-nested">
+      <section className="sheet sheet-large">
+        <header className="sheet-header">
+          <div>
+            <p className="eyebrow">Palette</p>
+            <h2>Ajouter une couleur</h2>
+          </div>
+          <button className="icon-button" onClick={onClose} aria-label="Fermer">
+            <Settings2 size={18} />
+          </button>
+        </header>
+        <div className="color-library">
+          {COLOR_LIBRARY.map((preset) => {
+            const selected = selectedIds.includes(preset.id);
+            return (
+              <button
+                key={preset.id}
+                className={selected ? "color-library-card color-library-card-disabled" : "color-library-card"}
+                style={{ background: preset.bg, borderColor: preset.border, color: preset.fg }}
+                onClick={() => onSelectColor(preset)}
+                disabled={selected}
+              >
+                <span className="color-library-dot" style={{ background: preset.border }} />
+                <strong>{preset.label}</strong>
+              </button>
+            );
+          })}
+        </div>
       </section>
     </div>
   );

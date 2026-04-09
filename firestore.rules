@@ -24,10 +24,11 @@ service cloud.firestore {
     }
 
     function validUserMetaDoc() {
-      return request.resource.data.keys().hasOnly(['locations', 'sources', 'onSiteDates']) &&
+      return request.resource.data.keys().hasOnly(['locations', 'sources', 'onSiteDates', 'colorPresets']) &&
         request.resource.data.locations is list &&
         request.resource.data.sources is list &&
-        request.resource.data.onSiteDates is list;
+        request.resource.data.onSiteDates is list &&
+        request.resource.data.colorPresets is list;
     }
 
     function validEventDoc() {

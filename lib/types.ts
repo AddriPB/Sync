@@ -62,3 +62,10 @@ export type LocationSuggestion = {
   label: string;
   source: "history" | "nominatim";
 };
+
+export type UserMeta = {
+  locations: string[];
+  sources: ExternalSourceConnection[];
+  onSiteDates: string[];
+  colorPresets: ColorPreset[];
+};
