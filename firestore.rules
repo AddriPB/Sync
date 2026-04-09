@@ -1,0 +1,91 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function validUserDoc(userId) {
+      return request.resource.data.keys().hasOnly([
+        'id',
+        'username',
+        'authEmail',
+        'createdAt'
+      ]) &&
+      request.resource.data.id == userId &&
+      request.resource.data.username is string &&
+      request.resource.data.authEmail is string &&
+      request.resource.data.createdAt is string;
+    }
+
+    function validUserMetaDoc() {
+      return request.resource.data.keys().hasOnly(['locations', 'sources']) &&
+        request.resource.data.locations is list &&
+        request.resource.data.sources is list;
+    }
+
+    function validEventDoc() {
+      return request.resource.data.keys().hasOnly([
+        'id',
+        'userId',
+        'title',
+        'allDay',
+        'startDate',
+        'startTime',
+        'endDate',
+        'endTime',
+        'location',
+        'colorId',
+        'source',
+        'sourceMeta',
+        'createdAt',
+        'updatedAt'
+      ]) &&
+      request.resource.data.id is string &&
+      request.resource.data.userId == request.auth.uid &&
+      request.resource.data.title is string &&
+      request.resource.data.allDay is bool &&
+      request.resource.data.startDate is string &&
+      request.resource.data.endDate is string &&
+      request.resource.data.colorId is string &&
+      request.resource.data.source is string &&
+      request.resource.data.createdAt is string &&
+      request.resource.data.updatedAt is string;
+    }
+
+    function validUsernameDoc(username) {
+      return request.resource.data.keys().hasOnly(['uid', 'username', 'createdAt']) &&
+        request.resource.data.uid == request.auth.uid &&
+        request.resource.data.username == username &&
+        request.resource.data.createdAt is string;
+    }
+
+    match /users/{userId} {
+      allow create: if isOwner(userId) && validUserDoc(userId);
+      allow read, update, delete: if isOwner(userId);
+    }
+
+    match /userMeta/{userId} {
+      allow create, update: if isOwner(userId) && validUserMetaDoc();
+      allow read, delete: if isOwner(userId);
+    }
+
+    match /events/{eventId} {
+      allow create, update: if isSignedIn() && validEventDoc();
+      allow read, delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+    }
+
+    match /usernames/{username} {
+      allow create: if isSignedIn() &&
+        !exists(/databases/$(database)/documents/usernames/$(username)) &&
+        validUsernameDoc(username);
+      allow read: if isSignedIn();
+      allow update, delete: if isSignedIn() && resource.data.uid == request.auth.uid;
+    }
+  }
+}
