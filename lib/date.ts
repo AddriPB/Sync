@@ -83,9 +83,9 @@ export function sortEvents(events: CalendarEvent[]) {
 
 export function getPlanningDays(events: CalendarEvent[], anchorDate: string) {
   const grouped = groupEventsByDate(sortEvents(events));
-  const dates = Object.keys(grouped).filter((date) => date >= anchorDate);
+  const dates = Object.keys(grouped).sort((a, b) => a.localeCompare(b));
   if (dates.length === 0) {
-    return [anchorDate];
+    return anchorDate ? [anchorDate] : [];
   }
   return dates;
 }
@@ -110,4 +110,15 @@ export function formatTimeRange(event: CalendarEvent) {
     return `À partir de ${event.startTime}`;
   }
   return "Heure non précisée";
+}
+
+export function timeStringToMinutes(time?: string) {
+  if (!time) {
+    return null;
+  }
+  const [hours, minutes] = time.split(":").map(Number);
+  if (Number.isNaN(hours) || Number.isNaN(minutes)) {
+    return null;
+  }
+  return hours * 60 + minutes;
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { getDefaultEventForm } from "@/lib/storage";
-import { MINUTE_OPTIONS, getMonthGrid, moveAnchor } from "@/lib/date";
+import { MINUTE_OPTIONS, getMonthGrid, getPlanningDays, moveAnchor } from "@/lib/date";
 
 describe("calendar helpers", () => {
   it("limits minute options to quarter hours", () => {
@@ -20,5 +20,38 @@ describe("calendar helpers", () => {
     const defaults = getDefaultEventForm("2026-04-09");
     expect(defaults.startDate).toBe("2026-04-09");
     expect(defaults.endDate).toBe("2026-04-09");
+  });
+
+  it("returns planning days across past and future event dates without empty days", () => {
+    const days = getPlanningDays(
+      [
+        {
+          id: "1",
+          userId: "u",
+          title: "Past",
+          allDay: true,
+          startDate: "2026-04-01",
+          endDate: "2026-04-01",
+          colorId: "ocean",
+          source: "sync",
+          createdAt: "",
+          updatedAt: ""
+        },
+        {
+          id: "2",
+          userId: "u",
+          title: "Future",
+          allDay: true,
+          startDate: "2026-04-12",
+          endDate: "2026-04-13",
+          colorId: "rose",
+          source: "sync",
+          createdAt: "",
+          updatedAt: ""
+        }
+      ],
+      "2026-04-09"
+    );
+    expect(days).toEqual(["2026-04-01", "2026-04-12", "2026-04-13"]);
   });
 });

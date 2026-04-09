@@ -53,6 +53,7 @@ const seedSources: ExternalSourceConnection[] = [
 type UserMeta = {
   locations: string[];
   sources: ExternalSourceConnection[];
+  onSiteDates: string[];
 };
 
 function normalizeUsername(username: string) {
@@ -68,13 +69,15 @@ async function getUserMeta(userId: string): Promise<UserMeta> {
   if (!snapshot.exists()) {
     return {
       locations: [],
-      sources: seedSources
+      sources: seedSources,
+      onSiteDates: []
     };
   }
   const data = snapshot.data() as Partial<UserMeta>;
   return {
     locations: data.locations ?? [],
-    sources: data.sources ?? seedSources
+    sources: data.sources ?? seedSources,
+    onSiteDates: data.onSiteDates ?? []
   };
 }
 
@@ -181,7 +184,8 @@ export async function signUp(username: string, password: string): Promise<Sessio
       transaction.set(doc(db, USERS_COLLECTION, userId), userDoc);
       transaction.set(doc(db, USER_META_COLLECTION, userId), {
         locations: [],
-        sources: seedSources
+        sources: seedSources,
+        onSiteDates: []
       });
       transaction.set(usernameRef, {
         uid: userId,
@@ -289,6 +293,21 @@ export async function rememberLocation(userId: string, location: string) {
 export async function getExternalSourceConnections(userId: string) {
   const meta = await getUserMeta(userId);
   return meta.sources;
+}
+
+export async function getOnSiteDates(userId: string) {
+  const meta = await getUserMeta(userId);
+  return meta.onSiteDates;
+}
+
+export async function toggleOnSiteDate(userId: string, date: string) {
+  const meta = await getUserMeta(userId);
+  const exists = meta.onSiteDates.includes(date);
+  const nextDates = exists
+    ? meta.onSiteDates.filter((entry) => entry !== date)
+    : [...meta.onSiteDates, date].sort((a, b) => a.localeCompare(b));
+  await setUserMeta(userId, { onSiteDates: nextDates });
+  return nextDates;
 }
 
 export async function updateExternalSource(
