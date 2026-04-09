@@ -710,7 +710,7 @@ function WeekDayColumn({
     >
       <div className="week-column-head">
         <span>{formatShortDay(date)}</span>
-        <strong className={isTodayDateFns(date) ? "today-chip-inline" : ""}>{format(date, "d")}</strong>
+        <strong className={isTodayDateFns(date) ? "today-chip" : ""}>{format(date, "d")}</strong>
       </div>
       <div className="week-grid-lines">
         {WEEK_HOURS.map((hour) => (
