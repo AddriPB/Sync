@@ -362,6 +362,8 @@ function getTopbarTitle(view: CalendarView, selectedDate: string) {
 function useLongPressAction(action: () => void) {
   const timerRef = useRef<number | null>(null);
   const didLongPress = useRef(false);
+  const pressStartedAt = useRef<number | null>(null);
+  const suppressClickUntil = useRef(0);
   const [isPressing, setIsPressing] = useState(false);
 
   function clearTimer() {
@@ -373,22 +375,35 @@ function useLongPressAction(action: () => void) {
 
   function start() {
     didLongPress.current = false;
+    pressStartedAt.current = Date.now();
     setIsPressing(true);
     clearTimer();
     timerRef.current = window.setTimeout(() => {
       didLongPress.current = true;
+      suppressClickUntil.current = Date.now() + 400;
       setIsPressing(false);
       action();
     }, LONG_PRESS_MS);
   }
 
   function finish() {
+    if (
+      pressStartedAt.current !== null &&
+      !didLongPress.current &&
+      Date.now() - pressStartedAt.current >= LONG_PRESS_MS
+    ) {
+      didLongPress.current = true;
+      suppressClickUntil.current = Date.now() + 400;
+      action();
+    }
+    pressStartedAt.current = null;
     setIsPressing(false);
     clearTimer();
   }
 
   function cancel() {
     didLongPress.current = false;
+    pressStartedAt.current = null;
     finish();
   }
 
@@ -405,7 +420,7 @@ function useLongPressAction(action: () => void) {
       onContextMenu: (event: React.MouseEvent) => event.preventDefault()
     },
     consumeLongPress() {
-      const value = didLongPress.current;
+      const value = didLongPress.current || Date.now() < suppressClickUntil.current;
       didLongPress.current = false;
       return value;
     }
