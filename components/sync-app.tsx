@@ -400,7 +400,6 @@ function useLongPressAction(action: () => void) {
       onTouchStart: start,
       onTouchEnd: finish,
       onTouchCancel: cancel,
-      onTouchMove: cancel,
       onContextMenu: (event: React.MouseEvent) => event.preventDefault()
     },
     consumeLongPress() {
