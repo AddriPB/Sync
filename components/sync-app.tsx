@@ -27,7 +27,6 @@ import {
   getColorPresets,
   getDefaultEventForm,
   getEvents,
-  getExternalSourceConnections,
   getOnSiteDates,
   getRememberedLocations,
   getSession,
@@ -38,15 +37,13 @@ import {
   signOut,
   signUp,
   toEventFormValues,
-  toggleOnSiteDate,
-  updateExternalSource
+  toggleOnSiteDate
 } from "@/lib/storage";
 import type {
   CalendarEvent,
   CalendarView,
   ColorPreset,
   EventFormValues,
-  ExternalSourceConnection,
   LocationSuggestion,
   Session
 } from "@/lib/types";
@@ -76,7 +73,6 @@ export function SyncApp() {
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [createDraft, setCreateDraft] = useState<EventFormValues | null>(null);
   const [showSettings, setShowSettings] = useState(false);
-  const [sourceConnections, setSourceConnections] = useState<ExternalSourceConnection[]>([]);
   const [onSiteDates, setOnSiteDates] = useState<string[]>([]);
   const [colorPresets, setColorPresets] = useState<ColorPreset[]>([]);
   const swipeStart = useRef<{ x: number; y: number } | null>(null);
@@ -116,14 +112,12 @@ export function SyncApp() {
     if (!userId) {
       return;
     }
-    const [nextEvents, nextSources, nextOnSiteDates, nextColorPresets] = await Promise.all([
+    const [nextEvents, nextOnSiteDates, nextColorPresets] = await Promise.all([
       getEvents(userId),
-      getExternalSourceConnections(userId),
       getOnSiteDates(userId),
       getColorPresets(userId)
     ]);
     setEvents(sortEvents(nextEvents));
-    setSourceConnections(nextSources);
     setOnSiteDates(nextOnSiteDates);
     setColorPresets(nextColorPresets);
   }
@@ -324,19 +318,10 @@ export function SyncApp() {
 
         {showSettings ? (
           <SettingsSheet
-            connections={sourceConnections}
             colorPresets={colorPresets}
             username={session.username}
             onClose={() => setShowSettings(false)}
             onSignOut={handleSignOut}
-            onToggleSource={(source, enabled) => {
-              if (!session) {
-                return;
-              }
-              void updateExternalSource(session.userId, source, enabled).then(() => {
-                void refreshData(session.userId);
-              });
-            }}
             onAddColor={(preset) => {
               if (!session) {
                 return;
@@ -1112,21 +1097,17 @@ function TimeSelect({
 }
 
 function SettingsSheet({
-  connections,
   colorPresets,
   username,
   onClose,
   onSignOut,
-  onToggleSource,
   onAddColor,
   onRemoveColor
 }: {
-  connections: ExternalSourceConnection[];
   colorPresets: ColorPreset[];
   username: string;
   onClose: () => void;
   onSignOut: () => void;
-  onToggleSource: (source: ExternalSourceConnection["source"], enabled: boolean) => void;
   onAddColor: (preset: ColorPreset) => void;
   onRemoveColor: (colorId: string) => void;
 }) {
@@ -1173,22 +1154,6 @@ function SettingsSheet({
               ))}
             </div>
           </div>
-
-          <div className="settings-card">
-            <h3>Sources externes</h3>
-            <p>Lecture seule, prêtes à être reliées à Apple anniversaires et Google invitations.</p>
-          </div>
-          {connections.map((connection) => (
-            <div key={connection.source} className="source-row">
-              <div>
-                <strong>{connection.label}</strong>
-                <span>{connection.status}</span>
-              </div>
-              <button className={connection.enabled ? "switch switch-active" : "switch"} onClick={() => onToggleSource(connection.source, !connection.enabled)}>
-                <span />
-              </button>
-            </div>
-          ))}
         </div>
 
         <footer className="sheet-footer">
