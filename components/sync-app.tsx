@@ -386,7 +386,7 @@ function useLongPressAction(action: () => void) {
     }, LONG_PRESS_MS);
   }
 
-  function finish() {
+  function finish(event?: { preventDefault?: () => void; stopPropagation?: () => void }) {
     if (
       pressStartedAt.current !== null &&
       !didLongPress.current &&
@@ -394,7 +394,13 @@ function useLongPressAction(action: () => void) {
     ) {
       didLongPress.current = true;
       suppressClickUntil.current = Date.now() + 400;
+      event?.preventDefault?.();
+      event?.stopPropagation?.();
       action();
+    }
+    if (didLongPress.current) {
+      event?.preventDefault?.();
+      event?.stopPropagation?.();
     }
     pressStartedAt.current = null;
     setIsPressing(false);
@@ -418,6 +424,9 @@ function useLongPressAction(action: () => void) {
       onTouchEnd: finish,
       onTouchCancel: cancel,
       onContextMenu: (event: React.MouseEvent) => event.preventDefault()
+    },
+    shouldSuppressClick() {
+      return didLongPress.current || Date.now() < suppressClickUntil.current;
     },
     consumeLongPress() {
       const value = didLongPress.current || Date.now() < suppressClickUntil.current;
@@ -628,6 +637,12 @@ function PlanningDayCard({
   return (
     <article
       className={getDaySurfaceClass("planning-day", active, onSite, longPress.isPressing)}
+      onClickCapture={(event) => {
+        if (longPress.shouldSuppressClick()) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      }}
       onClick={() => {
         if (longPress.consumeLongPress()) {
           return;
@@ -753,6 +768,12 @@ function WeekDayColumn({
   return (
     <article
       className={getDaySurfaceClass("week-column", active, onSite, longPress.isPressing)}
+      onClickCapture={(event) => {
+        if (longPress.shouldSuppressClick()) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      }}
       onClick={(clickEvent) => {
         if (longPress.consumeLongPress()) {
           return;
@@ -895,6 +916,12 @@ function MonthCell({
   return (
     <button
       className={`${getDaySurfaceClass("month-cell", active, onSite, longPress.isPressing)}${muted ? " month-cell-muted" : ""}`}
+      onClickCapture={(event) => {
+        if (longPress.shouldSuppressClick()) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      }}
       onClick={() => {
         if (longPress.consumeLongPress()) {
           return;
