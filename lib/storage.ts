@@ -60,6 +60,12 @@ function usernameToAuthEmail(username: string) {
   return `${normalizeUsername(username)}@sync.local`;
 }
 
+function stripUndefinedFields<T extends Record<string, unknown>>(value: T): T {
+  return Object.fromEntries(
+    Object.entries(value).filter(([, entryValue]) => entryValue !== undefined)
+  ) as T;
+}
+
 async function getUserMeta(userId: string): Promise<UserMeta> {
   const snapshot = await getDoc(doc(db, USER_META_COLLECTION, userId));
   if (!snapshot.exists()) {
@@ -265,7 +271,7 @@ export async function saveEvent(userId: string, values: EventFormValues, existin
     updatedAt: now
   };
 
-  await setDoc(doc(db, EVENTS_COLLECTION, event.id), event);
+  await setDoc(doc(db, EVENTS_COLLECTION, event.id), stripUndefinedFields(event));
   await rememberLocation(userId, values.location);
   return event;
 }
