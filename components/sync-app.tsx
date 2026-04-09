@@ -884,10 +884,13 @@ function EventSheet({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [historySuggestions, setHistorySuggestions] = useState<LocationSuggestion[]>([]);
   const [remoteSuggestions, setRemoteSuggestions] = useState<LocationSuggestion[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [submitError, setSubmitError] = useState("");
 
   useEffect(() => {
     setValues(initialValues);
     setEndDateTouched(mode === "edit");
+    setSubmitError("");
   }, [initialValues, mode]);
 
   useEffect(() => {
@@ -931,6 +934,21 @@ function EventSheet({
   const canSubmit = !errors.title && !errors.startDate && !errors.endDate;
   const suggestions = [...historySuggestions, ...remoteSuggestions].slice(0, 6);
   const readonlyExternal = event ? event.source !== "sync" : false;
+
+  async function handleSubmit() {
+    if (!canSubmit || readonlyExternal || saving) {
+      return;
+    }
+    setSaving(true);
+    setSubmitError("");
+    try {
+      await onSave(values);
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : "Impossible d'enregistrer l'événement.");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <div className="overlay">
@@ -1021,16 +1039,17 @@ function EventSheet({
           </div>
 
           {readonlyExternal ? <p className="hint-text">Cet événement provient d'une source externe en lecture seule.</p> : null}
+          {submitError ? <p className="error-text">{submitError}</p> : null}
         </div>
 
         <footer className="sheet-footer">
           {mode === "edit" && event?.source === "sync" ? (
             showDeleteConfirm ? (
-              <button className="danger-button" onClick={() => onDelete(event.id)}>
+              <button type="button" className="danger-button" onClick={() => onDelete(event.id)}>
                 Confirmer la suppression
               </button>
             ) : (
-              <button className="ghost-button" onClick={() => setShowDeleteConfirm(true)}>
+              <button type="button" className="ghost-button" onClick={() => setShowDeleteConfirm(true)}>
                 <Trash2 size={16} />
                 Supprimer
               </button>
@@ -1039,8 +1058,8 @@ function EventSheet({
             <div />
           )}
 
-          <button className="primary-button" disabled={!canSubmit || readonlyExternal} onClick={() => void onSave(values)}>
-            {mode === "create" ? "Créer" : "Enregistrer"}
+          <button type="button" className="primary-button" disabled={!canSubmit || readonlyExternal || saving} onClick={() => void handleSubmit()}>
+            {saving ? "Enregistrement..." : mode === "create" ? "Créer" : "Enregistrer"}
           </button>
         </footer>
       </section>
