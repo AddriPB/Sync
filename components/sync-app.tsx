@@ -55,7 +55,7 @@ type AuthMode = "login" | "signup";
 
 const LONG_PRESS_MS = 420;
 const SWIPE_THRESHOLD = 54;
-const WEEK_HOURS = Array.from({ length: 17 }, (_, index) => (index === 16 ? "00:00" : `${String(index + 8).padStart(2, "0")}:00`));
+const WEEK_HOURS = Array.from({ length: 17 }, (_, index) => (index === 16 ? "00h" : `${String(index + 8).padStart(2, "0")}h`));
 const DAY_START_MINUTES = 8 * 60;
 const DAY_END_MINUTES = 24 * 60;
 const DAY_RANGE_MINUTES = DAY_END_MINUTES - DAY_START_MINUTES;
