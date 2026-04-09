@@ -385,13 +385,22 @@ function useLongPressAction(action: () => void) {
     clearTimer();
   }
 
+  function cancel() {
+    didLongPress.current = false;
+    finish();
+  }
+
   return {
     isPressing,
     handlers: {
       onPointerDown: start,
       onPointerUp: finish,
-      onPointerCancel: finish,
-      onPointerLeave: finish,
+      onPointerCancel: cancel,
+      onPointerLeave: cancel,
+      onTouchStart: start,
+      onTouchEnd: finish,
+      onTouchCancel: cancel,
+      onTouchMove: cancel,
       onContextMenu: (event: React.MouseEvent) => event.preventDefault()
     },
     consumeLongPress() {
