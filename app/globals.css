@@ -408,9 +408,9 @@ button {
 }
 
 .today-chip {
-  min-width: 28px;
-  height: 28px;
-  padding: 0 8px;
+  min-width: 34px;
+  height: 34px;
+  padding: 0 10px;
   border-radius: 999px;
   display: inline-flex;
   align-items: center;
@@ -418,6 +418,7 @@ button {
   background: #f4f7fc;
   color: #0f1218;
   font-weight: 700;
+  line-height: 1;
 }
 
 .month-dots {
