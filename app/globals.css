@@ -26,6 +26,7 @@ body {
     linear-gradient(180deg, #0d1017, #06070b);
   color: var(--text);
   font-family: var(--font);
+  -webkit-touch-callout: none;
 }
 
 button,
@@ -171,6 +172,8 @@ button {
 .month-cell {
   position: relative;
   overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .planning-day {
@@ -192,7 +195,15 @@ button {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, rgba(88, 166, 255, 0.12), rgba(88, 166, 255, 0.03));
+  background: linear-gradient(180deg, rgba(88, 166, 255, 0.22), rgba(88, 166, 255, 0.08));
+  pointer-events: none;
+}
+
+.day-surface-pressing::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.08);
   pointer-events: none;
 }
 

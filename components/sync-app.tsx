@@ -170,8 +170,18 @@ export function SyncApp() {
     if (!session) {
       return;
     }
-    const nextDates = await toggleOnSiteDate(session.userId, date);
-    setOnSiteDates(nextDates);
+    const optimisticDates = onSiteDates.includes(date)
+      ? onSiteDates.filter((entry) => entry !== date)
+      : [...onSiteDates, date].sort((a, b) => a.localeCompare(b));
+
+    setOnSiteDates(optimisticDates);
+
+    try {
+      const nextDates = await toggleOnSiteDate(session.userId, date);
+      setOnSiteDates(nextDates);
+    } catch {
+      setOnSiteDates(onSiteDates);
+    }
   }
 
   function shift(direction: -1 | 1) {
@@ -350,6 +360,7 @@ function getTopbarTitle(view: CalendarView, selectedDate: string) {
 function useLongPressAction(action: () => void) {
   const timerRef = useRef<number | null>(null);
   const didLongPress = useRef(false);
+  const [isPressing, setIsPressing] = useState(false);
 
   function clearTimer() {
     if (timerRef.current) {
@@ -360,25 +371,28 @@ function useLongPressAction(action: () => void) {
 
   function start() {
     didLongPress.current = false;
+    setIsPressing(true);
     clearTimer();
     timerRef.current = window.setTimeout(() => {
       didLongPress.current = true;
+      setIsPressing(false);
       action();
     }, LONG_PRESS_MS);
   }
 
   function finish() {
+    setIsPressing(false);
     clearTimer();
   }
 
   return {
+    isPressing,
     handlers: {
-      onTouchStart: start,
-      onTouchEnd: finish,
-      onTouchCancel: finish,
-      onMouseDown: start,
-      onMouseUp: finish,
-      onMouseLeave: finish
+      onPointerDown: start,
+      onPointerUp: finish,
+      onPointerCancel: finish,
+      onPointerLeave: finish,
+      onContextMenu: (event: React.MouseEvent) => event.preventDefault()
     },
     consumeLongPress() {
       const value = didLongPress.current;
@@ -552,7 +566,7 @@ function PlanningDayCard({
 
   return (
     <article
-      className={getDaySurfaceClass("planning-day", active, onSite)}
+      className={getDaySurfaceClass("planning-day", active, onSite, longPress.isPressing)}
       onClick={() => {
         if (longPress.consumeLongPress()) {
           return;
@@ -677,7 +691,7 @@ function WeekDayColumn({
 
   return (
     <article
-      className={getDaySurfaceClass("week-column", active, onSite)}
+      className={getDaySurfaceClass("week-column", active, onSite, longPress.isPressing)}
       onClick={() => {
         if (longPress.consumeLongPress()) {
           return;
@@ -818,7 +832,7 @@ function MonthCell({
 
   return (
     <button
-      className={`${getDaySurfaceClass("month-cell", active, onSite)}${muted ? " month-cell-muted" : ""}`}
+      className={`${getDaySurfaceClass("month-cell", active, onSite, longPress.isPressing)}${muted ? " month-cell-muted" : ""}`}
       onClick={() => {
         if (longPress.consumeLongPress()) {
           return;
@@ -1239,8 +1253,8 @@ function ColorLibrarySheet({
   );
 }
 
-function getDaySurfaceClass(base: string, active: boolean, onSite: boolean) {
-  return `${base}${active ? ` ${base}-active` : ""}${onSite ? " day-surface-onsite" : ""}`;
+function getDaySurfaceClass(base: string, active: boolean, onSite: boolean, isPressing = false) {
+  return `${base}${active ? ` ${base}-active` : ""}${onSite ? " day-surface-onsite" : ""}${isPressing ? " day-surface-pressing" : ""}`;
 }
 
 function getWeekEventStyle(event: CalendarEvent, dateKey: string) {
