@@ -2,17 +2,13 @@ import { getApps, initializeApp } from "firebase/app";
 import { browserLocalPersistence, getAuth, setPersistence } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
-function getFirebaseEnv(name: string) {
-  return process.env[name] ?? "";
-}
-
 const firebaseConfig = {
-  apiKey: getFirebaseEnv("NEXT_PUBLIC_FIREBASE_API_KEY"),
-  authDomain: getFirebaseEnv("NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN"),
-  projectId: getFirebaseEnv("NEXT_PUBLIC_FIREBASE_PROJECT_ID"),
-  storageBucket: getFirebaseEnv("NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET"),
-  messagingSenderId: getFirebaseEnv("NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID"),
-  appId: getFirebaseEnv("NEXT_PUBLIC_FIREBASE_APP_ID")
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY ?? "",
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN ?? "",
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ?? "",
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET ?? "",
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID ?? "",
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID ?? ""
 };
 
 const missingFirebaseEnv = Object.entries(firebaseConfig)
