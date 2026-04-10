@@ -27,12 +27,22 @@ body {
   color: var(--text);
   font-family: var(--font);
   -webkit-touch-callout: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 button,
 input,
 select {
   font: inherit;
+}
+
+input,
+textarea,
+select,
+[contenteditable="true"] {
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 button {
