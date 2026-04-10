@@ -424,8 +424,6 @@ button {
 .event-chip,
 .info-badge,
 .readonly-badge,
-.month-cell-count,
-.week-column-count,
 .month-overflow {
   display: inline-flex;
   align-items: center;
@@ -439,8 +437,6 @@ button {
 
 .event-chip,
 .info-badge,
-.month-cell-count,
-.week-column-count,
 .month-overflow {
   background: rgba(255, 255, 255, 0.08);
   color: var(--text);
@@ -523,6 +519,11 @@ button {
   color: var(--text);
   font-size: 0.92rem;
   line-height: 1;
+}
+
+.week-column-head .today-chip {
+  color: #0f1218;
+  font-weight: 700;
 }
 
 .week-grid-lines,

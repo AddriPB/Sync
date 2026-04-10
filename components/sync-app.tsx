@@ -814,7 +814,6 @@ function WeekDayColumn({
 }) {
   const longPress = useLongPressAction(() => onToggleOnSite(dateKey));
   const layouts = getWeekEventLayouts(events, dateKey);
-  const totalEvents = events.length;
 
   return (
     <article
@@ -839,7 +838,6 @@ function WeekDayColumn({
           <span>{formatShortDay(date)}</span>
           <strong className={isTodayDateFns(date) ? "today-chip" : ""}>{format(date, "d")}</strong>
         </div>
-        {totalEvents > 0 ? <span className="week-column-count">{totalEvents}</span> : null}
       </div>
       <div className="week-grid-lines">
         {WEEK_HOURS.map((hour) => (
@@ -923,7 +921,6 @@ function MonthView({
             <p>{formatDayLabel(selectedDate)}</p>
             <span>{selectedEvents.length} événement{selectedEvents.length > 1 ? "s" : ""}</span>
           </div>
-          <span className="info-badge info-badge-strong">{format(parseISO(selectedDate), "d MMM", { locale: fr })}</span>
         </header>
         <div className="month-detail-list month-detail-scroll">
           {selectedEvents.map((event) => {
@@ -1002,7 +999,6 @@ function MonthCell({
     >
       <div className="month-cell-head">
         <span className={isTodayDateFns(day) ? "today-chip" : "month-date"}>{format(day, "d")}</span>
-        {dayEvents.length > 0 ? <span className="month-cell-count">{dayEvents.length}</span> : null}
       </div>
       <div className="month-previews">
         {visibleEvents.map((event) => {
