@@ -25,11 +25,13 @@ export function formatDayLabel(date: string) {
 }
 
 export function formatShortDay(date: Date) {
-  return format(date, "EEE", { locale: fr });
+  const shortDay = format(date, "EEE", { locale: fr }).replace(".", "");
+  return shortDay.slice(0, 1).toUpperCase() + shortDay.slice(1, 3);
 }
 
 export function formatMonthTitle(date: Date) {
-  return format(date, "MMMM yyyy", { locale: fr });
+  const monthTitle = format(date, "MMMM yyyy", { locale: fr });
+  return monthTitle.slice(0, 1).toUpperCase() + monthTitle.slice(1);
 }
 
 export function getWeekDays(anchorDate: string) {
