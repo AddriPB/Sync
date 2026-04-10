@@ -285,7 +285,6 @@ button {
 }
 
 .planning-day-title,
-.planning-day-title-main,
 .planning-day-badges,
 .month-cell-head,
 .detail-event-main,
@@ -295,7 +294,6 @@ button {
 .sheet-header-copy,
 .sheet-header-actions,
 .section-heading,
-.suggestion-group,
 .month-detail-heading {
   display: flex;
 }
@@ -309,10 +307,8 @@ button {
   justify-content: space-between;
 }
 
-.planning-day-title-main,
 .detail-event-copy,
 .event-card-copy,
-.suggestion-group,
 .month-detail-heading {
   flex-direction: column;
 }
@@ -328,6 +324,20 @@ button {
 .sheet-header-actions {
   gap: 6px;
   flex-wrap: wrap;
+}
+
+.planning-day-title {
+  gap: 10px;
+}
+
+.planning-day-title p {
+  flex: 1;
+  min-width: 0;
+}
+
+.planning-day-badges {
+  align-items: center;
+  justify-content: flex-end;
 }
 
 .planning-day-header span,
@@ -756,7 +766,7 @@ button {
 .field {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .field span,
@@ -768,7 +778,7 @@ button {
 .field input,
 .field select {
   width: 100%;
-  min-height: 48px;
+  min-height: 44px;
   border-radius: 16px;
   border: 1px solid var(--border);
   background: var(--panel-2);
@@ -777,7 +787,7 @@ button {
 }
 
 .field-title input {
-  min-height: 58px;
+  min-height: 52px;
   font-size: 1rem;
   font-weight: 600;
 }
@@ -849,7 +859,7 @@ button {
 }
 
 .sheet-section {
-  padding: 14px;
+  padding: 12px;
 }
 
 .sheet-section-hero {
@@ -857,21 +867,20 @@ button {
 }
 
 .date-card {
-  padding: 12px;
+  padding: 10px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .date-card-header span,
-.suggestion-group-title,
 .sheet-context {
   color: var(--muted);
   font-size: 0.76rem;
 }
 
 .section-heading {
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
 .section-heading strong {
@@ -885,29 +894,30 @@ button {
 }
 
 .color-swatch {
-  width: 100%;
-  min-height: 54px;
-  border-radius: 18px;
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
   border: 2px solid transparent;
   display: inline-flex;
-  align-items: flex-end;
-  justify-content: flex-start;
-  padding: 10px;
-  color: #0f1218;
-  font-size: 0.68rem;
-  font-weight: 700;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.26);
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 8px 18px rgba(0, 0, 0, 0.14);
 }
 
 .color-swatch-active {
   border-color: #ffffff;
   box-shadow:
     0 0 0 1px rgba(255, 255, 255, 0.16),
+    0 0 0 5px rgba(255, 255, 255, 0.07),
     0 12px 26px rgba(0, 0, 0, 0.18);
 }
 
 .color-row-large {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(6, 42px);
+  justify-content: start;
 }
 
 .primary-button,
@@ -984,14 +994,14 @@ button {
 }
 
 .sheet-fields {
-  padding: 0 16px 16px;
+  padding: 0 16px 14px;
   overflow-y: auto;
   align-content: start;
-  gap: 12px;
+  gap: 8px;
 }
 
 .sheet-footer {
-  padding: 12px 16px 18px;
+  padding: 10px 16px 14px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1000,31 +1010,19 @@ button {
   border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.suggestions-row {
-  display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  padding-bottom: 2px;
-}
-
-.suggestion-pill {
-  white-space: nowrap;
-  min-height: 36px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--text);
-  padding: 0 14px;
-}
-
-.suggestion-group {
-  gap: 8px;
-}
-
 .sheet-header-copy {
   min-width: 0;
   flex: 1;
   flex-direction: column;
   gap: 4px;
+}
+
+.header-close-button {
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
 }
 
 .sheet-context {
@@ -1190,7 +1188,7 @@ button {
 
   .date-section-grid,
   .color-row-large {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(5, 42px);
   }
 
   .sheet-fields {

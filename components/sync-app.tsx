@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { CalendarDays, Clock3, Grid2x2, MapPin, Plus, Settings2, Trash2, X } from "lucide-react";
+import { CalendarDays, Clock3, Grid2x2, MapPin, Plus, Settings2, Trash2 } from "lucide-react";
 import { format, isSameMonth, isToday as isTodayDateFns, parseISO, startOfWeek } from "date-fns";
 import { fr } from "date-fns/locale";
 import { COLOR_LIBRARY, getColorPresetById } from "@/lib/colors";
@@ -20,7 +20,6 @@ import {
   timeStringToMinutes,
   todayIso
 } from "@/lib/date";
-import { fetchLocationSuggestions } from "@/lib/location";
 import {
   addColorPreset,
   deleteEvent,
@@ -28,7 +27,6 @@ import {
   getDefaultEventForm,
   getEvents,
   getOnSiteDates,
-  getRememberedLocations,
   getSession,
   observeSession,
   removeColorPreset,
@@ -44,7 +42,6 @@ import type {
   CalendarView,
   ColorPreset,
   EventFormValues,
-  LocationSuggestion,
   Session
 } from "@/lib/types";
 
@@ -344,7 +341,6 @@ export function SyncApp() {
         {showComposer ? (
           <EventSheet
             mode={selectedEvent ? "edit" : "create"}
-            currentUserId={session.userId}
             colorPresets={colorPresets}
             initialValues={composerDefaults}
             event={selectedEvent}
@@ -695,14 +691,12 @@ function PlanningDayCard({
     >
       <header className="planning-day-header">
         <div className="planning-day-title">
-          <div className="planning-day-title-main">
-            <p>{formatDayLabel(date)}</p>
-            <div className="planning-day-badges">
-              {isToday ? <span className="info-badge info-badge-strong">Aujourd'hui</span> : null}
-              {onSite ? <span className="info-badge">Sur site</span> : null}
-            </div>
+          <p>{formatDayLabel(date)}</p>
+          <div className="planning-day-badges">
+            {isToday ? <span className="info-badge info-badge-strong">Aujourd'hui</span> : null}
+            {onSite ? <span className="info-badge">Sur site</span> : null}
+            <span>{events.length} événement{events.length > 1 ? "s" : ""}</span>
           </div>
-          <span>{events.length} événement{events.length > 1 ? "s" : ""}</span>
         </div>
       </header>
       <div className="planning-list">
@@ -1028,7 +1022,6 @@ function MonthCell({
 
 function EventSheet({
   mode,
-  currentUserId,
   colorPresets,
   initialValues,
   event,
@@ -1037,7 +1030,6 @@ function EventSheet({
   onSave
 }: {
   mode: "create" | "edit";
-  currentUserId: string;
   colorPresets: ColorPreset[];
   initialValues: EventFormValues;
   event: CalendarEvent | null;
@@ -1048,8 +1040,6 @@ function EventSheet({
   const [values, setValues] = useState<EventFormValues>(initialValues);
   const [endDateTouched, setEndDateTouched] = useState(mode === "edit");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [historySuggestions, setHistorySuggestions] = useState<LocationSuggestion[]>([]);
-  const [remoteSuggestions, setRemoteSuggestions] = useState<LocationSuggestion[]>([]);
   const [saving, setSaving] = useState(false);
   const [submitError, setSubmitError] = useState("");
 
@@ -1058,28 +1048,6 @@ function EventSheet({
     setEndDateTouched(mode === "edit");
     setSubmitError("");
   }, [initialValues, mode]);
-
-  useEffect(() => {
-    void getRememberedLocations(currentUserId).then((locations) => {
-      const history = locations
-        .filter((entry) => entry.toLowerCase().includes(values.location.toLowerCase()))
-        .map((entry) => ({
-          id: `history-${entry}`,
-          label: entry,
-          source: "history" as const
-        }));
-      setHistorySuggestions(history);
-    });
-  }, [currentUserId, values.location]);
-
-  useEffect(() => {
-    const timeout = window.setTimeout(async () => {
-      const suggestions = await fetchLocationSuggestions(values.location);
-      setRemoteSuggestions(suggestions);
-    }, 250);
-
-    return () => window.clearTimeout(timeout);
-  }, [values.location]);
 
   function patch(next: Partial<EventFormValues>) {
     setValues((current) => {
@@ -1101,11 +1069,8 @@ function EventSheet({
   };
 
   const canSubmit = !errors.title && !errors.startDate && !errors.endDate;
-  const suggestions = [...historySuggestions, ...remoteSuggestions].slice(0, 6);
   const readonlyExternal = event ? event.source !== "sync" : false;
   const sheetDismiss = useSheetDismiss(onClose);
-  const historySuggestionsOnly = suggestions.filter((suggestion) => suggestion.source === "history");
-  const remoteSuggestionsOnly = suggestions.filter((suggestion) => suggestion.source === "nominatim");
 
   async function handleSubmit() {
     if (!canSubmit || readonlyExternal || saving) {
@@ -1136,8 +1101,8 @@ function EventSheet({
           </div>
           <div className="sheet-header-actions">
             {readonlyExternal ? <span className="readonly-badge">Lecture seule</span> : null}
-            <button className="icon-button" onClick={onClose} aria-label="Fermer">
-              <X size={18} />
+            <button className="header-close-button" onClick={onClose} aria-label="Fermer">
+              Fermer
             </button>
           </div>
         </header>
@@ -1233,32 +1198,6 @@ function EventSheet({
               <span>Lieu</span>
               <input value={values.location} onChange={(inputEvent) => patch({ location: inputEvent.target.value })} placeholder="Ajouter un lieu" disabled={readonlyExternal} />
             </label>
-
-            {!readonlyExternal && historySuggestionsOnly.length > 0 ? (
-              <div className="suggestion-group">
-                <span className="suggestion-group-title">Récents</span>
-                <div className="suggestions-row">
-                  {historySuggestionsOnly.map((suggestion) => (
-                    <button key={suggestion.id} className="suggestion-pill" onClick={() => patch({ location: suggestion.label })}>
-                      {suggestion.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-
-            {!readonlyExternal && remoteSuggestionsOnly.length > 0 ? (
-              <div className="suggestion-group">
-                <span className="suggestion-group-title">Suggestions</span>
-                <div className="suggestions-row">
-                  {remoteSuggestionsOnly.map((suggestion) => (
-                    <button key={suggestion.id} className="suggestion-pill" onClick={() => patch({ location: suggestion.label })}>
-                      {suggestion.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : null}
           </section>
 
           <section className="sheet-section">
@@ -1271,13 +1210,11 @@ function EventSheet({
                 <button
                   key={preset.id}
                   className={values.colorId === preset.id ? "color-swatch color-swatch-active" : "color-swatch"}
-                  style={{ background: preset.border }}
+                  style={{ background: preset.bg, borderColor: preset.border, color: preset.fg }}
                   onClick={() => patch({ colorId: preset.id })}
                   aria-label={preset.label}
                   disabled={readonlyExternal}
-                >
-                  <span>{preset.label}</span>
-                </button>
+                />
               ))}
             </div>
           </section>
@@ -1365,9 +1302,9 @@ function SettingsSheet({
             <p className="eyebrow">Paramétrages</p>
             <h2>@{username}</h2>
           </div>
-          <button className="icon-button" onClick={onClose} aria-label="Fermer">
-            <X size={18} />
-          </button>
+            <button className="header-close-button" onClick={onClose} aria-label="Fermer">
+              Fermer
+            </button>
         </header>
 
         <div className="sheet-fields">
@@ -1487,8 +1424,8 @@ function ColorLibrarySheet({
             <p className="eyebrow">Palette</p>
             <h2>Ajouter une couleur</h2>
           </div>
-          <button className="icon-button" onClick={onClose} aria-label="Fermer">
-            <X size={18} />
+          <button className="header-close-button" onClick={onClose} aria-label="Fermer">
+            Fermer
           </button>
         </header>
         <div className="color-library">
