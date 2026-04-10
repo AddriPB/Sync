@@ -503,12 +503,18 @@ button {
   grid-template-columns: repeat(7, 1fr);
   gap: 6px;
   min-height: 0;
+  flex: 1;
 }
 
 .week-columns-board,
 .month-grid-board {
   position: relative;
   min-height: 0;
+}
+
+.week-columns-board {
+  display: flex;
+  flex-direction: column;
 }
 
 .week-column {
@@ -684,12 +690,12 @@ button {
   min-width: 0;
   border-radius: 18px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02));
-  padding: 7px 5px 6px;
+  padding: 5px 4px 4px;
   display: flex;
   flex-direction: column;
   align-items: stretch;
   justify-content: flex-start;
-  gap: 6px;
+  gap: 3px;
 }
 
 .month-cell-muted {
@@ -698,6 +704,15 @@ button {
 
 .month-date {
   color: #f4f7fc;
+  font-size: 0.75rem;
+  padding-left: 3px;
+}
+
+.month-cell-head .today-chip {
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  font-size: 0.7rem;
 }
 
 .today-chip {

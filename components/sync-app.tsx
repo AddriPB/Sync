@@ -396,6 +396,7 @@ export function SyncApp() {
           <SettingsSheet
             colorPresets={colorPresets}
             onSiteWeekdays={onSiteWeekdays}
+            username={session?.username ?? ""}
             onClose={() => setShowSettings(false)}
             onSignOut={handleSignOut}
             onToggleOnSiteWeekday={handleToggleOnSiteWeekday}
@@ -1357,6 +1358,7 @@ function TimeSelect({
 function SettingsSheet({
   colorPresets,
   onSiteWeekdays,
+  username,
   onClose,
   onSignOut,
   onToggleOnSiteWeekday,
@@ -1365,6 +1367,7 @@ function SettingsSheet({
 }: {
   colorPresets: ColorPreset[];
   onSiteWeekdays: number[];
+  username: string;
   onClose: () => void;
   onSignOut: () => void;
   onToggleOnSiteWeekday: (weekday: number) => void;
@@ -1384,7 +1387,7 @@ function SettingsSheet({
           </div>
           <div>
             <p className="eyebrow">Paramétrages</p>
-            <h2>Utilisateur</h2>
+            <h2>{username}</h2>
           </div>
         </header>
 
