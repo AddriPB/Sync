@@ -53,7 +53,7 @@ type AuthMode = "login" | "signup";
 const LONG_PRESS_MS = 420;
 const SWIPE_THRESHOLD = 54;
 const SHEET_CLOSE_THRESHOLD = 88;
-const WEEK_HOURS = Array.from({ length: 17 }, (_, index) => (index === 16 ? "00h" : `${String(index + 8).padStart(2, "0")}h`));
+const WEEK_HOURS = Array.from({ length: 17 }, (_, index) => (index === 16 ? "00" : String(index + 8).padStart(2, "0")));
 const DAY_START_MINUTES = 8 * 60;
 const DAY_END_MINUTES = 24 * 60;
 const DAY_RANGE_MINUTES = DAY_END_MINUTES - DAY_START_MINUTES;
@@ -69,6 +69,7 @@ export function SyncApp() {
   const [session, setSession] = useState<Session | null>(null);
   const [view, setView] = useState<CalendarView>("planning");
   const [selectedDate, setSelectedDate] = useState(todayIso());
+  const [swipeAnimation, setSwipeAnimation] = useState<"next" | "prev" | null>(null);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [showComposer, setShowComposer] = useState(false);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
@@ -77,6 +78,7 @@ export function SyncApp() {
   const [onSiteDates, setOnSiteDates] = useState<string[]>([]);
   const [colorPresets, setColorPresets] = useState<ColorPreset[]>([]);
   const swipeStart = useRef<{ x: number; y: number } | null>(null);
+  const animationResetRef = useRef<number | null>(null);
 
   useEffect(() => {
     void getSession().then(setSession);
@@ -90,6 +92,14 @@ export function SyncApp() {
     }
     void refreshData(session.userId);
   }, [session]);
+
+  useEffect(() => {
+    return () => {
+      if (animationResetRef.current) {
+        window.clearTimeout(animationResetRef.current);
+      }
+    };
+  }, []);
 
   const selectedEvent = useMemo(
     () => events.find((event) => event.id === editingEventId) ?? null,
@@ -196,7 +206,15 @@ export function SyncApp() {
     if (view === "planning") {
       return;
     }
+    if (animationResetRef.current) {
+      window.clearTimeout(animationResetRef.current);
+    }
+    setSwipeAnimation(direction === 1 ? "next" : "prev");
     setSelectedDate((current) => moveAnchor(current, view, direction));
+    animationResetRef.current = window.setTimeout(() => {
+      setSwipeAnimation(null);
+      animationResetRef.current = null;
+    }, 260);
   }
 
   function handleTouchStart(event: React.TouchEvent<HTMLElement>) {
@@ -231,8 +249,7 @@ export function SyncApp() {
     <main className="shell">
       <section className="phone-frame">
         <header className="topbar">
-          <div>
-            <p className="eyebrow">Sync</p>
+          <div className="topbar-title">
             <h1>{getTopbarTitle(view, selectedDate)}</h1>
           </div>
           <div className="topbar-actions">
@@ -255,26 +272,36 @@ export function SyncApp() {
             />
           ) : null}
           {view === "week" ? (
-            <WeekView
-              events={events}
-              selectedDate={selectedDate}
-              onCreateEvent={handleCreate}
-              onEditEvent={handleEdit}
-              onSiteDates={onSiteDates}
-              onToggleOnSite={handleToggleOnSite}
-              colorPresets={colorPresets}
-            />
+            <div
+              key={`week-${selectedDate}`}
+              className={`calendar-transition${swipeAnimation ? ` calendar-transition-${swipeAnimation}` : ""}`}
+            >
+              <WeekView
+                events={events}
+                selectedDate={selectedDate}
+                onCreateEvent={handleCreate}
+                onEditEvent={handleEdit}
+                onSiteDates={onSiteDates}
+                onToggleOnSite={handleToggleOnSite}
+                colorPresets={colorPresets}
+              />
+            </div>
           ) : null}
           {view === "month" ? (
-            <MonthView
-              events={events}
-              selectedDate={selectedDate}
-              onCreateEvent={handleCreate}
-              onEditEvent={handleEdit}
-              onSiteDates={onSiteDates}
-              onToggleOnSite={handleToggleOnSite}
-              colorPresets={colorPresets}
-            />
+            <div
+              key={`month-${selectedDate}`}
+              className={`calendar-transition${swipeAnimation ? ` calendar-transition-${swipeAnimation}` : ""}`}
+            >
+              <MonthView
+                events={events}
+                selectedDate={selectedDate}
+                onSelectDate={setSelectedDate}
+                onEditEvent={handleEdit}
+                onSiteDates={onSiteDates}
+                onToggleOnSite={handleToggleOnSite}
+                colorPresets={colorPresets}
+              />
+            </div>
           ) : null}
         </section>
 
@@ -286,16 +313,29 @@ export function SyncApp() {
                 key={item.id}
                 className={view === item.id ? "nav-item nav-item-active" : "nav-item"}
                 onClick={() => setView(item.id)}
+                aria-label={item.label}
               >
                 <Icon size={18} />
-                <span>{item.label}</span>
               </button>
             );
           })}
         </nav>
 
-        {view === "planning" ? (
-          <button className="fab" onClick={() => handleCreate()} aria-label="Ajouter un événement">
+        {view === "planning" || view === "month" ? (
+          <button
+            className="fab"
+            onClick={() =>
+              handleCreate(
+                view === "month"
+                  ? {
+                      startDate: selectedDate,
+                      endDate: selectedDate
+                    }
+                  : undefined
+              )
+            }
+            aria-label="Ajouter un événement"
+          >
             <Plus size={24} />
           </button>
         ) : null}
@@ -824,7 +864,7 @@ function WeekDayColumn({
 function MonthView({
   events,
   selectedDate,
-  onCreateEvent,
+  onSelectDate,
   onEditEvent,
   onSiteDates,
   onToggleOnSite,
@@ -832,7 +872,7 @@ function MonthView({
 }: {
   events: CalendarEvent[];
   selectedDate: string;
-  onCreateEvent: (defaults?: Partial<EventFormValues>) => void;
+  onSelectDate: (date: string) => void;
   onEditEvent: (event: CalendarEvent) => void;
   onSiteDates: string[];
   onToggleOnSite: (date: string) => void;
@@ -855,7 +895,7 @@ function MonthView({
               dayEvents={dayEvents}
               selectedDate={selectedDate}
               onSite={onSiteDates.includes(dateKey)}
-              onCreateEvent={onCreateEvent}
+              onSelectDate={onSelectDate}
               onToggleOnSite={onToggleOnSite}
               colorPresets={colorPresets}
             />
@@ -896,7 +936,7 @@ function MonthCell({
   dayEvents,
   selectedDate,
   onSite,
-  onCreateEvent,
+  onSelectDate,
   onToggleOnSite,
   colorPresets
 }: {
@@ -905,7 +945,7 @@ function MonthCell({
   dayEvents: CalendarEvent[];
   selectedDate: string;
   onSite: boolean;
-  onCreateEvent: (defaults?: Partial<EventFormValues>) => void;
+  onSelectDate: (date: string) => void;
   onToggleOnSite: (date: string) => void;
   colorPresets: ColorPreset[];
 }) {
@@ -926,10 +966,7 @@ function MonthCell({
         if (longPress.consumeLongPress()) {
           return;
         }
-        onCreateEvent({
-          startDate: dateKey,
-          endDate: dateKey
-        });
+        onSelectDate(dateKey);
       }}
       {...longPress.handlers}
     >
@@ -1002,8 +1039,11 @@ function EventSheet({
   function patch(next: Partial<EventFormValues>) {
     setValues((current) => {
       const merged = { ...current, ...next };
-      if (Object.hasOwn(next, "startDate") && !endDateTouched) {
-        merged.endDate = merged.startDate;
+      if (Object.hasOwn(next, "startDate")) {
+        const nextStartDate = merged.startDate;
+        if (!endDateTouched || nextStartDate > current.endDate) {
+          merged.endDate = nextStartDate;
+        }
       }
       return merged;
     });
