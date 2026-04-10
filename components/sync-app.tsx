@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { CalendarDays, Clock3, Grid2x2, MapPin, Plus, Settings2, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { CalendarDays, Clock3, Grid2x2, MapPin, Plus, Settings2, Trash2, X } from "lucide-react";
 import { format, isSameMonth, isToday as isTodayDateFns, parseISO, startOfWeek } from "date-fns";
 import { fr } from "date-fns/locale";
 import { COLOR_LIBRARY, getColorPresetById } from "@/lib/colors";
@@ -58,6 +58,7 @@ const DAY_START_MINUTES = 8 * 60;
 const DAY_END_MINUTES = 24 * 60;
 const DAY_RANGE_MINUTES = DAY_END_MINUTES - DAY_START_MINUTES;
 const WEEK_HEADER_HEIGHT = 42;
+const WEEK_TIMED_TOP_GAP = 2;
 
 const navItems: Array<{ id: CalendarView; label: string; icon: typeof Clock3 }> = [
   { id: "planning", label: "Planning", icon: Clock3 },
@@ -321,7 +322,7 @@ export function SyncApp() {
           })}
         </nav>
 
-        {view === "planning" || view === "month" ? (
+        {(view === "planning" || view === "month") && !showComposer ? (
           <button
             className="fab"
             onClick={() =>
@@ -673,6 +674,7 @@ function PlanningDayCard({
   colorPresets: ColorPreset[];
 }) {
   const longPress = useLongPressAction(() => onToggleOnSite(date));
+  const isToday = date === todayIso();
 
   return (
     <article
@@ -692,14 +694,21 @@ function PlanningDayCard({
       {...longPress.handlers}
     >
       <header className="planning-day-header">
-        <div>
-          <p>{formatDayLabel(date)}</p>
+        <div className="planning-day-title">
+          <div className="planning-day-title-main">
+            <p>{formatDayLabel(date)}</p>
+            <div className="planning-day-badges">
+              {isToday ? <span className="info-badge info-badge-strong">Aujourd'hui</span> : null}
+              {onSite ? <span className="info-badge">Sur site</span> : null}
+            </div>
+          </div>
           <span>{events.length} événement{events.length > 1 ? "s" : ""}</span>
         </div>
       </header>
       <div className="planning-list">
         {events.map((event) => {
           const color = getColorPresetById(event.colorId, colorPresets);
+          const isAllDay = event.allDay;
           return (
             <button
               key={`${date}-${event.id}`}
@@ -710,14 +719,20 @@ function PlanningDayCard({
                 onEditEvent(event);
               }}
             >
+              <span className="event-card-accent" style={{ background: color.border }} />
               <div className="event-card-main">
-                <strong>{event.title}</strong>
-                <span>{formatTimeRange(event)}</span>
+                <div className="event-card-copy">
+                  <strong>{event.title}</strong>
+                  <div className="event-card-tags">
+                    <span>{formatTimeRange(event)}</span>
+                    {isAllDay ? <span className="event-chip">Journee</span> : null}
+                  </div>
+                </div>
               </div>
-              {event.location ? (
+              {event.location || event.source !== "sync" ? (
                 <div className="event-card-meta">
                   <MapPin size={14} />
-                  <span>{event.location}</span>
+                  <span>{event.location || "Source externe"}</span>
                 </div>
               ) : null}
             </button>
@@ -804,6 +819,8 @@ function WeekDayColumn({
   colorPresets: ColorPreset[];
 }) {
   const longPress = useLongPressAction(() => onToggleOnSite(dateKey));
+  const layouts = getWeekEventLayouts(events, dateKey);
+  const totalEvents = events.length;
 
   return (
     <article
@@ -824,8 +841,11 @@ function WeekDayColumn({
       {...longPress.handlers}
     >
       <div className="week-column-head">
-        <span>{formatShortDay(date)}</span>
-        <strong className={isTodayDateFns(date) ? "today-chip" : ""}>{format(date, "d")}</strong>
+        <div className="week-column-heading">
+          <span>{formatShortDay(date)}</span>
+          <strong className={isTodayDateFns(date) ? "today-chip" : ""}>{format(date, "d")}</strong>
+        </div>
+        {totalEvents > 0 ? <span className="week-column-count">{totalEvents}</span> : null}
       </div>
       <div className="week-grid-lines">
         {WEEK_HOURS.map((hour) => (
@@ -833,13 +853,12 @@ function WeekDayColumn({
         ))}
       </div>
       <div className="week-events-layer">
-        {events.map((event) => {
+        {layouts.map(({ event, style, density, isAllDay }) => {
           const color = getColorPresetById(event.colorId, colorPresets);
-          const style = getWeekEventStyle(event, dateKey);
           return (
             <button
               key={`${dateKey}-${event.id}`}
-              className="week-event-block"
+              className={`week-event-block week-event-block-${density}${isAllDay ? " week-event-block-all-day" : ""}`}
               style={{
                 ...style,
                 background: color.bg,
@@ -852,7 +871,8 @@ function WeekDayColumn({
               }}
             >
               <strong>{event.title}</strong>
-              <span>{event.allDay ? "Journee" : event.startTime || "--:--"}</span>
+              {density !== "compact" ? <span>{formatTimeRange(event)}</span> : null}
+              {density === "expanded" && event.location ? <small>{event.location}</small> : null}
             </button>
           );
         })}
@@ -886,7 +906,7 @@ function MonthView({
       <div className="month-grid">
         {days.map((day) => {
           const dateKey = format(day, "yyyy-MM-dd");
-          const dayEvents = events.filter((event) => spansOnDay(event, day)).slice(0, 3);
+          const dayEvents = events.filter((event) => spansOnDay(event, day));
           return (
             <MonthCell
               key={dateKey}
@@ -905,8 +925,11 @@ function MonthView({
 
       <div className="month-detail">
         <header>
-          <p>{formatDayLabel(selectedDate)}</p>
-          <span>{selectedEvents.length} événement{selectedEvents.length > 1 ? "s" : ""}</span>
+          <div className="month-detail-heading">
+            <p>{formatDayLabel(selectedDate)}</p>
+            <span>{selectedEvents.length} événement{selectedEvents.length > 1 ? "s" : ""}</span>
+          </div>
+          <span className="info-badge info-badge-strong">{format(parseISO(selectedDate), "d MMM", { locale: fr })}</span>
         </header>
         <div className="month-detail-list month-detail-scroll">
           {selectedEvents.map((event) => {
@@ -918,8 +941,19 @@ function MonthView({
                 style={{ background: color.bg, color: color.fg, borderColor: color.border }}
                 onClick={() => onEditEvent(event)}
               >
-                <strong>{event.title}</strong>
-                <span>{formatTimeRange(event)}</span>
+                <div className="detail-event-main">
+                  <span className="detail-event-accent" style={{ background: color.border }} />
+                  <div className="detail-event-copy">
+                    <strong>{event.title}</strong>
+                    <span>{formatTimeRange(event)}</span>
+                    {event.location ? (
+                      <small>
+                        <MapPin size={12} />
+                        {event.location}
+                      </small>
+                    ) : null}
+                  </div>
+                </div>
               </button>
             );
           })}
@@ -952,6 +986,8 @@ function MonthCell({
   const longPress = useLongPressAction(() => onToggleOnSite(dateKey));
   const active = selectedDate === dateKey;
   const muted = !isSameMonth(day, parseISO(selectedDate));
+  const visibleEvents = dayEvents.slice(0, 2);
+  const overflowCount = Math.max(dayEvents.length - visibleEvents.length, 0);
 
   return (
     <button
@@ -970,12 +1006,21 @@ function MonthCell({
       }}
       {...longPress.handlers}
     >
-      <span className={isTodayDateFns(day) ? "today-chip" : "month-date"}>{format(day, "d")}</span>
-      <div className="month-dots">
-        {dayEvents.map((event) => {
+      <div className="month-cell-head">
+        <span className={isTodayDateFns(day) ? "today-chip" : "month-date"}>{format(day, "d")}</span>
+        {dayEvents.length > 0 ? <span className="month-cell-count">{dayEvents.length}</span> : null}
+      </div>
+      <div className="month-previews">
+        {visibleEvents.map((event) => {
           const color = getColorPresetById(event.colorId, colorPresets);
-          return <span key={event.id} className="month-dot" style={{ background: color.border }} />;
+          return (
+            <span key={event.id} className="month-preview" style={{ borderColor: color.border, color: color.fg }}>
+              <span className="month-preview-accent" style={{ background: color.border }} />
+              <span className="month-preview-label">{event.title}</span>
+            </span>
+          );
         })}
+        {overflowCount > 0 ? <span className="month-overflow">+{overflowCount}</span> : null}
       </div>
     </button>
   );
@@ -1059,6 +1104,8 @@ function EventSheet({
   const suggestions = [...historySuggestions, ...remoteSuggestions].slice(0, 6);
   const readonlyExternal = event ? event.source !== "sync" : false;
   const sheetDismiss = useSheetDismiss(onClose);
+  const historySuggestionsOnly = suggestions.filter((suggestion) => suggestion.source === "history");
+  const remoteSuggestionsOnly = suggestions.filter((suggestion) => suggestion.source === "nominatim");
 
   async function handleSubmit() {
     if (!canSubmit || readonlyExternal || saving) {
@@ -1082,91 +1129,160 @@ function EventSheet({
           <div className="sheet-grabber-zone" {...sheetDismiss.gestureHandlers}>
             <div className="sheet-grabber" />
           </div>
-          <div>
+          <div className="sheet-header-copy">
             <p className="eyebrow">{mode === "create" ? "Nouvel événement" : "Modifier l'événement"}</p>
-            <h2>{readonlyExternal ? "Lecture seule" : mode === "create" ? "Créer" : "Modifier"}</h2>
+            <h2>{readonlyExternal ? "Lecture seule" : mode === "create" ? "Créer un événement" : "Modifier l'événement"}</h2>
+            <p className="sheet-context">{formatEventRangeSummary(values)}</p>
           </div>
-          <button className="icon-button" onClick={onClose} aria-label="Fermer">
-            <Settings2 size={18} />
-          </button>
+          <div className="sheet-header-actions">
+            {readonlyExternal ? <span className="readonly-badge">Lecture seule</span> : null}
+            <button className="icon-button" onClick={onClose} aria-label="Fermer">
+              <X size={18} />
+            </button>
+          </div>
         </header>
 
         <div className="sheet-fields">
-          <label className="field">
-            <span>Titre</span>
-            <input value={values.title} onChange={(inputEvent) => patch({ title: inputEvent.target.value })} placeholder="Ajouter un titre" disabled={readonlyExternal} />
-          </label>
-
-          <label className="switch-row">
-            <span>Toute la journée</span>
-            <button className={values.allDay ? "switch switch-active" : "switch"} onClick={() => patch({ allDay: !values.allDay })} disabled={readonlyExternal}>
-              <span />
-            </button>
-          </label>
-
-          <div className="date-grid">
-            <label className="field">
-              <span>Date de début</span>
-              <input type="date" value={values.startDate} onChange={(inputEvent) => patch({ startDate: inputEvent.target.value })} disabled={readonlyExternal} />
-            </label>
-            {!values.allDay ? (
-              <label className="field">
-                <span>Heure de début</span>
-                <TimeSelect value={values.startTime} onChange={(time) => patch({ startTime: time })} disabled={readonlyExternal} />
-              </label>
-            ) : null}
-          </div>
-
-          <div className="date-grid">
-            <label className="field">
-              <span>Date de fin</span>
+          <section className="sheet-section sheet-section-hero">
+            <label className="field field-title">
+              <span>Titre</span>
               <input
-                type="date"
-                value={values.endDate}
-                onChange={(inputEvent) => {
-                  setEndDateTouched(true);
-                  patch({ endDate: inputEvent.target.value });
-                }}
+                value={values.title}
+                onChange={(inputEvent) => patch({ title: inputEvent.target.value })}
+                placeholder="Ajouter un titre"
                 disabled={readonlyExternal}
+                autoFocus
               />
             </label>
-            {!values.allDay ? (
-              <label className="field">
-                <span>Heure de fin</span>
-                <TimeSelect value={values.endTime} onChange={(time) => patch({ endTime: time })} disabled={readonlyExternal} />
-              </label>
+
+            <label className="switch-row switch-row-card">
+              <div>
+                <strong>Toute la journée</strong>
+                <span>{values.allDay ? "Aucune heure affichée" : "Plage horaire précise"}</span>
+              </div>
+              <button
+                type="button"
+                className={values.allDay ? "switch switch-active" : "switch"}
+                onClick={() => patch({ allDay: !values.allDay })}
+                disabled={readonlyExternal}
+              >
+                <span />
+              </button>
+            </label>
+          </section>
+
+          <section className="sheet-section">
+            <div className="section-heading">
+              <p className="eyebrow">Date et heure</p>
+              <strong>Quand</strong>
+            </div>
+            <div className="date-section-grid">
+              <div className="date-card">
+                <div className="date-card-header">
+                  <span>Début</span>
+                </div>
+                <label className="field">
+                  <span>Date</span>
+                  <input
+                    type="date"
+                    value={values.startDate}
+                    onChange={(inputEvent) => patch({ startDate: inputEvent.target.value })}
+                    disabled={readonlyExternal}
+                  />
+                </label>
+                {!values.allDay ? (
+                  <label className="field">
+                    <span>Heure</span>
+                    <TimeSelect value={values.startTime} onChange={(time) => patch({ startTime: time })} disabled={readonlyExternal} />
+                  </label>
+                ) : null}
+              </div>
+
+              <div className="date-card">
+                <div className="date-card-header">
+                  <span>Fin</span>
+                </div>
+                <label className="field">
+                  <span>Date</span>
+                  <input
+                    type="date"
+                    value={values.endDate}
+                    onChange={(inputEvent) => {
+                      setEndDateTouched(true);
+                      patch({ endDate: inputEvent.target.value });
+                    }}
+                    disabled={readonlyExternal}
+                  />
+                </label>
+                {!values.allDay ? (
+                  <label className="field">
+                    <span>Heure</span>
+                    <TimeSelect value={values.endTime} onChange={(time) => patch({ endTime: time })} disabled={readonlyExternal} />
+                  </label>
+                ) : null}
+              </div>
+            </div>
+          </section>
+
+          <section className="sheet-section">
+            <div className="section-heading">
+              <p className="eyebrow">Lieu</p>
+              <strong>Où</strong>
+            </div>
+            <label className="field">
+              <span>Lieu</span>
+              <input value={values.location} onChange={(inputEvent) => patch({ location: inputEvent.target.value })} placeholder="Ajouter un lieu" disabled={readonlyExternal} />
+            </label>
+
+            {!readonlyExternal && historySuggestionsOnly.length > 0 ? (
+              <div className="suggestion-group">
+                <span className="suggestion-group-title">Récents</span>
+                <div className="suggestions-row">
+                  {historySuggestionsOnly.map((suggestion) => (
+                    <button key={suggestion.id} className="suggestion-pill" onClick={() => patch({ location: suggestion.label })}>
+                      {suggestion.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             ) : null}
-          </div>
 
-          <label className="field">
-            <span>Lieu</span>
-            <input value={values.location} onChange={(inputEvent) => patch({ location: inputEvent.target.value })} placeholder="Ajouter un lieu" disabled={readonlyExternal} />
-          </label>
+            {!readonlyExternal && remoteSuggestionsOnly.length > 0 ? (
+              <div className="suggestion-group">
+                <span className="suggestion-group-title">Suggestions</span>
+                <div className="suggestions-row">
+                  {remoteSuggestionsOnly.map((suggestion) => (
+                    <button key={suggestion.id} className="suggestion-pill" onClick={() => patch({ location: suggestion.label })}>
+                      {suggestion.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </section>
 
-          {suggestions.length > 0 && !readonlyExternal ? (
-            <div className="suggestions-row">
-              {suggestions.map((suggestion) => (
-                <button key={suggestion.id} className="suggestion-pill" onClick={() => patch({ location: suggestion.label })}>
-                  {suggestion.label}
+          <section className="sheet-section">
+            <div className="section-heading">
+              <p className="eyebrow">Couleur</p>
+              <strong>Apparence</strong>
+            </div>
+            <div className="color-row color-row-large">
+              {colorPresets.map((preset) => (
+                <button
+                  key={preset.id}
+                  className={values.colorId === preset.id ? "color-swatch color-swatch-active" : "color-swatch"}
+                  style={{ background: preset.border }}
+                  onClick={() => patch({ colorId: preset.id })}
+                  aria-label={preset.label}
+                  disabled={readonlyExternal}
+                >
+                  <span>{preset.label}</span>
                 </button>
               ))}
             </div>
-          ) : null}
+          </section>
 
-          <div className="color-row">
-            {colorPresets.map((preset) => (
-              <button
-                key={preset.id}
-                className={values.colorId === preset.id ? "color-swatch color-swatch-active" : "color-swatch"}
-                style={{ background: preset.border }}
-                onClick={() => patch({ colorId: preset.id })}
-                aria-label={preset.label}
-                disabled={readonlyExternal}
-              />
-            ))}
-          </div>
-
-          {readonlyExternal ? <p className="hint-text">Cet événement provient d'une source externe en lecture seule.</p> : null}
+          {readonlyExternal ? <p className="hint-text">Cet événement provient d'une source externe et ne peut pas être modifié ici.</p> : null}
           {submitError ? <p className="error-text">{submitError}</p> : null}
         </div>
 
@@ -1250,7 +1366,7 @@ function SettingsSheet({
             <h2>@{username}</h2>
           </div>
           <button className="icon-button" onClick={onClose} aria-label="Fermer">
-            <Settings2 size={18} />
+            <X size={18} />
           </button>
         </header>
 
@@ -1372,7 +1488,7 @@ function ColorLibrarySheet({
             <h2>Ajouter une couleur</h2>
           </div>
           <button className="icon-button" onClick={onClose} aria-label="Fermer">
-            <Settings2 size={18} />
+            <X size={18} />
           </button>
         </header>
         <div className="color-library">
@@ -1401,27 +1517,6 @@ function getDaySurfaceClass(base: string, active: boolean, onSite: boolean, isPr
   return `${base}${active ? ` ${base}-active` : ""}${onSite ? " day-surface-onsite" : ""}${isPressing ? " day-surface-pressing" : ""}`;
 }
 
-function getWeekEventStyle(event: CalendarEvent, dateKey: string) {
-  if (event.allDay || event.startDate !== dateKey || event.endDate !== dateKey) {
-    return {
-      top: "4%",
-      height: "11%"
-    };
-  }
-
-  const startMinutes = timeStringToMinutes(event.startTime) ?? DAY_START_MINUTES;
-  const endMinutes = timeStringToMinutes(event.endTime) ?? Math.min(startMinutes + 60, DAY_END_MINUTES);
-  const clampedStart = Math.min(Math.max(startMinutes, DAY_START_MINUTES), DAY_END_MINUTES - 15);
-  const clampedEnd = Math.min(Math.max(endMinutes, clampedStart + 30), DAY_END_MINUTES);
-  const top = ((clampedStart - DAY_START_MINUTES) / DAY_RANGE_MINUTES) * 100;
-  const height = Math.max(((clampedEnd - clampedStart) / DAY_RANGE_MINUTES) * 100, 6);
-
-  return {
-    top: `${top}%`,
-    height: `${height}%`
-  };
-}
-
 function getWeekCreateDefaults(dateKey: string, rect: DOMRect, clientY: number): Partial<EventFormValues> {
   const usableHeight = Math.max(rect.height - WEEK_HEADER_HEIGHT, 1);
   const relativeY = Math.min(Math.max(clientY - rect.top - WEEK_HEADER_HEIGHT, 0), usableHeight);
@@ -1443,4 +1538,103 @@ function minutesToTimeString(totalMinutes: number) {
   const hours = Math.floor(totalMinutes / 60) % 24;
   const minutes = totalMinutes % 60;
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
+function getWeekEventLayouts(events: CalendarEvent[], dateKey: string) {
+  const allDayEvents = events.filter((event) => event.allDay || event.startDate !== dateKey || event.endDate !== dateKey);
+  const timedEvents = events
+    .filter((event) => !allDayEvents.includes(event))
+    .map((event) => {
+      const startMinutes = timeStringToMinutes(event.startTime) ?? DAY_START_MINUTES;
+      const endMinutes = timeStringToMinutes(event.endTime) ?? Math.min(startMinutes + 60, DAY_END_MINUTES);
+
+      return {
+        event,
+        startMinutes: Math.min(Math.max(startMinutes, DAY_START_MINUTES), DAY_END_MINUTES - 15),
+        endMinutes: Math.min(Math.max(endMinutes, startMinutes + 30), DAY_END_MINUTES)
+      };
+    })
+    .sort((a, b) => a.startMinutes - b.startMinutes || a.endMinutes - b.endMinutes);
+
+  const allDayReserve = allDayEvents.length > 0 ? Math.min(18, 6 + allDayEvents.length * 4) : 0;
+  const allDayLayouts = allDayEvents.map((event, index) => ({
+    event,
+    density: "balanced" as const,
+    isAllDay: true,
+    style: {
+      top: `${WEEK_TIMED_TOP_GAP + index * 4.2}%`,
+      left: "4px",
+      right: "4px",
+      height: "4.2%"
+    }
+  }));
+
+  const groups: Array<Array<{ event: CalendarEvent; startMinutes: number; endMinutes: number; column: number }>> = [];
+  let activeGroup: Array<{ event: CalendarEvent; startMinutes: number; endMinutes: number; column: number }> = [];
+  let activeItems: Array<{ event: CalendarEvent; startMinutes: number; endMinutes: number; column: number }> = [];
+
+  for (const item of timedEvents) {
+    activeItems = activeItems.filter((active) => active.endMinutes > item.startMinutes);
+    if (activeItems.length === 0 && activeGroup.length > 0) {
+      groups.push(activeGroup);
+      activeGroup = [];
+    }
+
+    let column = 0;
+    while (activeItems.some((active) => active.column === column)) {
+      column += 1;
+    }
+
+    const nextItem = { ...item, column };
+    activeItems.push(nextItem);
+    activeGroup.push(nextItem);
+  }
+
+  if (activeGroup.length > 0) {
+    groups.push(activeGroup);
+  }
+
+  const timedLayouts = groups.flatMap((group) => {
+    const columns = Math.max(...group.map((item) => item.column)) + 1;
+
+    return group.map((item) => {
+      const top = ((item.startMinutes - DAY_START_MINUTES) / DAY_RANGE_MINUTES) * (100 - allDayReserve);
+      const height = Math.max(((item.endMinutes - item.startMinutes) / DAY_RANGE_MINUTES) * (100 - allDayReserve), 7);
+      const width = 100 / columns;
+      const density = height >= 18 ? "expanded" : height >= 10 ? "balanced" : "compact";
+
+      return {
+        event: item.event,
+        density,
+        isAllDay: false,
+        style: {
+          top: `${allDayReserve + top}%`,
+          height: `${Math.min(height, 100 - allDayReserve - top)}%`,
+          left: `calc(${item.column * width}% + 4px)`,
+          width: `calc(${width}% - 6px)`
+        } satisfies CSSProperties
+      };
+    });
+  });
+
+  return [...allDayLayouts, ...timedLayouts];
+}
+
+function formatEventRangeSummary(values: EventFormValues) {
+  const start = parseISO(values.startDate);
+  const end = parseISO(values.endDate);
+  const sameDay = values.startDate === values.endDate;
+
+  if (values.allDay) {
+    if (sameDay) {
+      return format(start, "EEEE d MMMM", { locale: fr });
+    }
+    return `${format(start, "d MMM", { locale: fr })} - ${format(end, "d MMM", { locale: fr })}`;
+  }
+
+  if (sameDay) {
+    return `${format(start, "EEEE d MMMM", { locale: fr })} · ${values.startTime || "--:--"} - ${values.endTime || "--:--"}`;
+  }
+
+  return `${format(start, "d MMM", { locale: fr })} ${values.startTime || "--:--"} - ${format(end, "d MMM", { locale: fr })} ${values.endTime || "--:--"}`;
 }
