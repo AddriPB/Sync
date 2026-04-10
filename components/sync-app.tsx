@@ -13,6 +13,7 @@ import {
   getMonthGrid,
   getPlanningDays,
   getWeekDays,
+  isOnSiteDate,
   MINUTE_OPTIONS,
   moveAnchor,
   sortEvents,
@@ -27,6 +28,7 @@ import {
   getDefaultEventForm,
   getEvents,
   getOnSiteDates,
+  getOnSiteWeekdays,
   getSession,
   observeSession,
   removeColorPreset,
@@ -35,7 +37,8 @@ import {
   signOut,
   signUp,
   toEventFormValues,
-  toggleOnSiteDate
+  toggleOnSiteDate,
+  toggleOnSiteWeekday
 } from "@/lib/storage";
 import type {
   CalendarEvent,
@@ -56,6 +59,13 @@ const DAY_END_MINUTES = 24 * 60;
 const DAY_RANGE_MINUTES = DAY_END_MINUTES - DAY_START_MINUTES;
 const WEEK_HEADER_HEIGHT = 42;
 const WEEK_TIMED_TOP_GAP = 2;
+const ON_SITE_WEEKDAY_OPTIONS = [
+  { label: "L", value: 1 },
+  { label: "M", value: 2 },
+  { label: "M", value: 3 },
+  { label: "J", value: 4 },
+  { label: "V", value: 5 }
+] as const;
 
 const navItems: Array<{ id: CalendarView; label: string; icon: typeof Clock3 }> = [
   { id: "planning", label: "Planning", icon: Clock3 },
@@ -74,6 +84,7 @@ export function SyncApp() {
   const [createDraft, setCreateDraft] = useState<EventFormValues | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [onSiteDates, setOnSiteDates] = useState<string[]>([]);
+  const [onSiteWeekdays, setOnSiteWeekdays] = useState<number[]>([]);
   const [colorPresets, setColorPresets] = useState<ColorPreset[]>([]);
   const swipeStart = useRef<{ x: number; y: number } | null>(null);
   const animationResetRef = useRef<number | null>(null);
@@ -121,13 +132,15 @@ export function SyncApp() {
     if (!userId) {
       return;
     }
-    const [nextEvents, nextOnSiteDates, nextColorPresets] = await Promise.all([
+    const [nextEvents, nextOnSiteDates, nextOnSiteWeekdays, nextColorPresets] = await Promise.all([
       getEvents(userId),
       getOnSiteDates(userId),
+      getOnSiteWeekdays(userId),
       getColorPresets(userId)
     ]);
     setEvents(sortEvents(nextEvents));
     setOnSiteDates(nextOnSiteDates);
+    setOnSiteWeekdays(nextOnSiteWeekdays);
     setColorPresets(nextColorPresets);
   }
 
@@ -141,6 +154,7 @@ export function SyncApp() {
     setSession(null);
     setEvents([]);
     setOnSiteDates([]);
+    setOnSiteWeekdays([]);
     setColorPresets([]);
     setShowComposer(false);
     setShowSettings(false);
@@ -200,6 +214,24 @@ export function SyncApp() {
     }
   }
 
+  async function handleToggleOnSiteWeekday(weekday: number) {
+    if (!session) {
+      return;
+    }
+    const optimisticWeekdays = onSiteWeekdays.includes(weekday)
+      ? onSiteWeekdays.filter((entry) => entry !== weekday)
+      : [...onSiteWeekdays, weekday].sort((a, b) => a - b);
+
+    setOnSiteWeekdays(optimisticWeekdays);
+
+    try {
+      const nextWeekdays = await toggleOnSiteWeekday(session.userId, weekday);
+      setOnSiteWeekdays(nextWeekdays);
+    } catch {
+      setOnSiteWeekdays(onSiteWeekdays);
+    }
+  }
+
   function shift(direction: -1 | 1) {
     if (view === "planning") {
       return;
@@ -248,6 +280,9 @@ export function SyncApp() {
       <section className="phone-frame">
         <header className="topbar">
           <div className="topbar-title">
+            <button className="icon-button today-nav-button" onClick={() => setSelectedDate(todayIso())} aria-label="Aujourd'hui">
+              <CalendarDays size={16} />
+            </button>
             <h1>{getTopbarTitle(view, selectedDate)}</h1>
           </div>
           <div className="topbar-actions">
@@ -265,6 +300,7 @@ export function SyncApp() {
               onSelectDate={setSelectedDate}
               onEditEvent={handleEdit}
               onSiteDates={onSiteDates}
+              onSiteWeekdays={onSiteWeekdays}
               onToggleOnSite={handleToggleOnSite}
               colorPresets={colorPresets}
             />
@@ -280,6 +316,7 @@ export function SyncApp() {
                 onCreateEvent={handleCreate}
                 onEditEvent={handleEdit}
                 onSiteDates={onSiteDates}
+                onSiteWeekdays={onSiteWeekdays}
                 onToggleOnSite={handleToggleOnSite}
                 colorPresets={colorPresets}
               />
@@ -296,6 +333,7 @@ export function SyncApp() {
                 onSelectDate={setSelectedDate}
                 onEditEvent={handleEdit}
                 onSiteDates={onSiteDates}
+                onSiteWeekdays={onSiteWeekdays}
                 onToggleOnSite={handleToggleOnSite}
                 colorPresets={colorPresets}
               />
@@ -357,9 +395,10 @@ export function SyncApp() {
         {showSettings ? (
           <SettingsSheet
             colorPresets={colorPresets}
-            username={session.username}
+            onSiteWeekdays={onSiteWeekdays}
             onClose={() => setShowSettings(false)}
             onSignOut={handleSignOut}
+            onToggleOnSiteWeekday={handleToggleOnSiteWeekday}
             onAddColor={(preset) => {
               if (!session) {
                 return;
@@ -612,6 +651,7 @@ function PlanningView({
   onSelectDate,
   onEditEvent,
   onSiteDates,
+  onSiteWeekdays,
   onToggleOnSite,
   colorPresets
 }: {
@@ -620,6 +660,7 @@ function PlanningView({
   onSelectDate: (date: string) => void;
   onEditEvent: (event: CalendarEvent) => void;
   onSiteDates: string[];
+  onSiteWeekdays: number[];
   onToggleOnSite: (date: string) => void;
   colorPresets: ColorPreset[];
 }) {
@@ -641,7 +682,7 @@ function PlanningView({
           date={group.date}
           events={group.events}
           active={selectedDate === group.date}
-          onSite={onSiteDates.includes(group.date)}
+          onSite={isOnSiteDate(group.date, onSiteDates, onSiteWeekdays)}
           onSelectDate={onSelectDate}
           onEditEvent={onEditEvent}
           onToggleOnSite={onToggleOnSite}
@@ -744,6 +785,7 @@ function WeekView({
   onCreateEvent,
   onEditEvent,
   onSiteDates,
+  onSiteWeekdays,
   onToggleOnSite,
   colorPresets
 }: {
@@ -752,6 +794,7 @@ function WeekView({
   onCreateEvent: (defaults?: Partial<EventFormValues>) => void;
   onEditEvent: (event: CalendarEvent) => void;
   onSiteDates: string[];
+  onSiteWeekdays: number[];
   onToggleOnSite: (date: string) => void;
   colorPresets: ColorPreset[];
 }) {
@@ -779,10 +822,10 @@ function WeekView({
                 <WeekDayColumn
                   key={dateKey}
                   date={day}
-                  dateKey={dateKey}
-                  events={dayEvents}
-                  active={selectedDate === dateKey}
-                  onSite={onSiteDates.includes(dateKey)}
+                dateKey={dateKey}
+                events={dayEvents}
+                active={selectedDate === dateKey}
+                onSite={isOnSiteDate(dateKey, onSiteDates, onSiteWeekdays)}
                   onCreateEvent={onCreateEvent}
                   onEditEvent={onEditEvent}
                   onToggleOnSite={onToggleOnSite}
@@ -911,6 +954,7 @@ function MonthView({
   onSelectDate,
   onEditEvent,
   onSiteDates,
+  onSiteWeekdays,
   onToggleOnSite,
   colorPresets
 }: {
@@ -919,6 +963,7 @@ function MonthView({
   onSelectDate: (date: string) => void;
   onEditEvent: (event: CalendarEvent) => void;
   onSiteDates: string[];
+  onSiteWeekdays: number[];
   onToggleOnSite: (date: string) => void;
   colorPresets: ColorPreset[];
 }) {
@@ -941,7 +986,7 @@ function MonthView({
                 dateKey={dateKey}
                 dayEvents={dayEvents}
                 selectedDate={selectedDate}
-                onSite={onSiteDates.includes(dateKey)}
+                onSite={isOnSiteDate(dateKey, onSiteDates, onSiteWeekdays)}
                 onSelectDate={onSelectDate}
                 onToggleOnSite={onToggleOnSite}
                 colorPresets={colorPresets}
@@ -1311,16 +1356,18 @@ function TimeSelect({
 
 function SettingsSheet({
   colorPresets,
-  username,
+  onSiteWeekdays,
   onClose,
   onSignOut,
+  onToggleOnSiteWeekday,
   onAddColor,
   onRemoveColor
 }: {
   colorPresets: ColorPreset[];
-  username: string;
+  onSiteWeekdays: number[];
   onClose: () => void;
   onSignOut: () => void;
+  onToggleOnSiteWeekday: (weekday: number) => void;
   onAddColor: (preset: ColorPreset) => void;
   onRemoveColor: (colorId: string) => void;
 }) {
@@ -1337,11 +1384,33 @@ function SettingsSheet({
           </div>
           <div>
             <p className="eyebrow">Paramétrages</p>
-            <h2>@{username}</h2>
+            <h2>Utilisateur</h2>
           </div>
         </header>
 
         <div className="sheet-fields">
+          <div className="settings-card">
+            <div className="settings-card-head">
+              <div>
+                <h3>Sur site</h3>
+                <p>Jours appliqués automatiquement sur toutes les vues.</p>
+              </div>
+            </div>
+            <div className="weekday-pills">
+              {ON_SITE_WEEKDAY_OPTIONS.map((option) => (
+                <button
+                  key={`${option.label}-${option.value}`}
+                  className={onSiteWeekdays.includes(option.value) ? "weekday-pill weekday-pill-active" : "weekday-pill"}
+                  onClick={() => onToggleOnSiteWeekday(option.value)}
+                  type="button"
+                  aria-pressed={onSiteWeekdays.includes(option.value)}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="settings-card">
             <div className="settings-card-head">
               <div>

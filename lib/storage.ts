@@ -73,6 +73,7 @@ async function getUserMeta(userId: string): Promise<UserMeta> {
       locations: [],
       sources: seedSources,
       onSiteDates: [],
+      onSiteWeekdays: [],
       colorPresets: DEFAULT_USER_COLOR_PRESETS
     };
   }
@@ -81,6 +82,7 @@ async function getUserMeta(userId: string): Promise<UserMeta> {
     locations: data.locations ?? [],
     sources: data.sources ?? seedSources,
     onSiteDates: data.onSiteDates ?? [],
+    onSiteWeekdays: data.onSiteWeekdays ?? [],
     colorPresets: data.colorPresets?.length ? data.colorPresets : DEFAULT_USER_COLOR_PRESETS
   };
 }
@@ -190,6 +192,7 @@ export async function signUp(username: string, password: string): Promise<Sessio
         locations: [],
         sources: seedSources,
         onSiteDates: [],
+        onSiteWeekdays: [],
         colorPresets: DEFAULT_USER_COLOR_PRESETS
       });
       transaction.set(usernameRef, {
@@ -345,6 +348,11 @@ export async function getOnSiteDates(userId: string) {
   return meta.onSiteDates;
 }
 
+export async function getOnSiteWeekdays(userId: string) {
+  const meta = await getUserMeta(userId);
+  return meta.onSiteWeekdays;
+}
+
 export async function toggleOnSiteDate(userId: string, date: string) {
   const meta = await getUserMeta(userId);
   const exists = meta.onSiteDates.includes(date);
@@ -353,6 +361,16 @@ export async function toggleOnSiteDate(userId: string, date: string) {
     : [...meta.onSiteDates, date].sort((a, b) => a.localeCompare(b));
   await setUserMeta(userId, { onSiteDates: nextDates });
   return nextDates;
+}
+
+export async function toggleOnSiteWeekday(userId: string, weekday: number) {
+  const meta = await getUserMeta(userId);
+  const exists = meta.onSiteWeekdays.includes(weekday);
+  const nextWeekdays = exists
+    ? meta.onSiteWeekdays.filter((entry) => entry !== weekday)
+    : [...meta.onSiteWeekdays, weekday].sort((a, b) => a - b);
+  await setUserMeta(userId, { onSiteWeekdays: nextWeekdays });
+  return nextWeekdays;
 }
 
 export async function updateExternalSource(

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { getDefaultEventForm } from "@/lib/storage";
-import { MINUTE_OPTIONS, getMonthGrid, getPlanningDays, moveAnchor } from "@/lib/date";
+import { MINUTE_OPTIONS, getMonthGrid, getPlanningDays, isOnSiteDate, moveAnchor } from "@/lib/date";
 
 describe("calendar helpers", () => {
   it("limits minute options to quarter hours", () => {
@@ -53,5 +53,10 @@ describe("calendar helpers", () => {
       "2026-04-09"
     );
     expect(days).toEqual(["2026-04-01", "2026-04-12", "2026-04-13"]);
+  });
+
+  it("marks recurring on-site weekdays without a dated override", () => {
+    expect(isOnSiteDate("2026-04-13", [], [1, 2])).toBe(true);
+    expect(isOnSiteDate("2026-04-15", [], [1, 2])).toBe(false);
   });
 });

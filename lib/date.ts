@@ -6,6 +6,7 @@ import {
   endOfMonth,
   endOfWeek,
   format,
+  getISODay,
   isSameDay,
   parseISO,
   startOfMonth,
@@ -32,6 +33,13 @@ export function formatShortDay(date: Date) {
 export function formatMonthTitle(date: Date) {
   const monthTitle = format(date, "MMMM yyyy", { locale: fr });
   return monthTitle.slice(0, 1).toUpperCase() + monthTitle.slice(1);
+}
+
+export function isOnSiteDate(date: string, onSiteDates: string[], onSiteWeekdays: number[]) {
+  if (onSiteDates.includes(date)) {
+    return true;
+  }
+  return onSiteWeekdays.includes(getISODay(parseISO(date)));
 }
 
 export function getWeekDays(anchorDate: string) {
