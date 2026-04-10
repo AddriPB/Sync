@@ -67,5 +67,6 @@ export type UserMeta = {
   locations: string[];
   sources: ExternalSourceConnection[];
   onSiteDates: string[];
+  onSiteWeekdays: number[];
   colorPresets: ColorPreset[];
 };

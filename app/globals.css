@@ -90,6 +90,17 @@ button {
 
 .topbar-title {
   min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.topbar-title h1 {
+  min-width: 0;
+}
+
+.today-nav-button {
+  flex: 0 0 auto;
 }
 
 .eyebrow {
@@ -244,6 +255,13 @@ button {
   background: rgba(255, 255, 255, 0.06);
 }
 
+.planning-day-today {
+  border-color: rgba(255, 244, 184, 0.9);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 244, 184, 0.42),
+    0 0 0 1px rgba(255, 244, 184, 0.14);
+}
+
 .day-surface-onsite::before {
   content: "";
   position: absolute;
@@ -285,7 +303,6 @@ button {
 }
 
 .planning-day-title,
-.planning-day-title-main,
 .planning-day-badges,
 .month-cell-head,
 .detail-event-main,
@@ -293,26 +310,21 @@ button {
 .event-card-copy,
 .event-card-tags,
 .sheet-header-copy,
-.sheet-header-actions,
 .section-heading,
-.suggestion-group,
 .month-detail-heading {
   display: flex;
 }
 
 .planning-day-title,
 .month-cell-head,
-.sheet-header-actions,
 .section-heading,
 .month-detail header {
   align-items: center;
   justify-content: space-between;
 }
 
-.planning-day-title-main,
 .detail-event-copy,
 .event-card-copy,
-.suggestion-group,
 .month-detail-heading {
   flex-direction: column;
 }
@@ -324,10 +336,23 @@ button {
 }
 
 .planning-day-badges,
-.event-card-tags,
-.sheet-header-actions {
+.event-card-tags {
   gap: 6px;
   flex-wrap: wrap;
+}
+
+.planning-day-title {
+  gap: 10px;
+}
+
+.planning-day-title p {
+  flex: 1;
+  min-width: 0;
+}
+
+.planning-day-badges {
+  align-items: center;
+  justify-content: flex-end;
 }
 
 .planning-day-header span,
@@ -414,8 +439,6 @@ button {
 .event-chip,
 .info-badge,
 .readonly-badge,
-.month-cell-count,
-.week-column-count,
 .month-overflow {
   display: inline-flex;
   align-items: center;
@@ -429,8 +452,6 @@ button {
 
 .event-chip,
 .info-badge,
-.month-cell-count,
-.week-column-count,
 .month-overflow {
   background: rgba(255, 255, 255, 0.08);
   color: var(--text);
@@ -480,21 +501,28 @@ button {
 .week-columns {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 4px;
+  gap: 6px;
+  min-height: 0;
+}
+
+.week-columns-board,
+.month-grid-board {
+  position: relative;
   min-height: 0;
 }
 
 .week-column {
-  border-radius: 20px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.022));
-  border: 1px solid transparent;
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.02));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
 }
 
 .week-column-head {
   height: 42px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   padding: 6px 6px 0;
   color: var(--muted);
   text-transform: capitalize;
@@ -505,14 +533,22 @@ button {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 3px;
+  width: 100%;
   min-width: 0;
+  text-align: center;
 }
 
 .week-column-head strong {
   color: var(--text);
   font-size: 0.92rem;
   line-height: 1;
+}
+
+.week-column-head .today-chip {
+  color: #0f1218;
+  font-weight: 700;
 }
 
 .week-grid-lines,
@@ -534,6 +570,13 @@ button {
   pointer-events: none;
 }
 
+.week-spans-layer {
+  position: absolute;
+  inset: 44px 0 0;
+  pointer-events: none;
+  z-index: 3;
+}
+
 .week-event-block {
   position: absolute;
   display: flex;
@@ -543,6 +586,7 @@ button {
   min-height: 32px;
   pointer-events: auto;
   overflow: hidden;
+  border-radius: 6px;
   box-shadow:
     0 10px 18px rgba(0, 0, 0, 0.18),
     inset 0 1px 0 rgba(255, 255, 255, 0.04);
@@ -553,7 +597,10 @@ button {
 .event-card strong {
   display: block;
   font-size: 0.72rem;
-  line-height: 1.15;
+  line-height: 1.1;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .week-event-block span,
@@ -589,6 +636,38 @@ button {
   min-height: 26px;
 }
 
+.week-span-block,
+.month-span-block {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 18px;
+  border-radius: 6px;
+  border: 1px solid;
+  padding: 0 8px;
+  pointer-events: auto;
+  overflow: hidden;
+  box-shadow:
+    0 8px 16px rgba(0, 0, 0, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.week-span-block strong,
+.month-span-block strong {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 0.62rem;
+  line-height: 1;
+}
+
+.week-span-block span {
+  font-size: 0.56rem;
+  opacity: 0.86;
+  white-space: nowrap;
+}
+
 .month-view {
   grid-template-rows: 1fr 232px;
 }
@@ -597,6 +676,7 @@ button {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
   gap: 4px;
+  height: 100%;
   min-height: 0;
 }
 
@@ -644,7 +724,27 @@ button {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  margin-top: var(--month-span-reserve, 0px);
   min-height: 0;
+}
+
+.month-spans-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.month-span-block {
+  height: 16px;
+  justify-content: flex-start;
+}
+
+.month-span-accent {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  flex: 0 0 auto;
 }
 
 .month-preview {
@@ -756,7 +856,7 @@ button {
 .field {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .field span,
@@ -768,7 +868,7 @@ button {
 .field input,
 .field select {
   width: 100%;
-  min-height: 48px;
+  min-height: 44px;
   border-radius: 16px;
   border: 1px solid var(--border);
   background: var(--panel-2);
@@ -777,9 +877,24 @@ button {
 }
 
 .field-title input {
-  min-height: 58px;
+  min-height: 52px;
   font-size: 1rem;
   font-weight: 600;
+}
+
+.field-compact {
+  gap: 4px;
+}
+
+.field-compact span {
+  font-size: 0.72rem;
+}
+
+.field-compact input,
+.field-compact select {
+  min-height: 40px;
+  border-radius: 14px;
+  padding: 0 12px;
 }
 
 .switch-row {
@@ -835,13 +950,13 @@ button {
   gap: 10px;
 }
 
-.date-section-grid {
+.date-section-grid,
+.date-compact-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
 }
 
-.date-card,
 .sheet-section {
   border-radius: 22px;
   background: rgba(255, 255, 255, 0.04);
@@ -849,29 +964,20 @@ button {
 }
 
 .sheet-section {
-  padding: 14px;
+  padding: 12px;
 }
 
 .sheet-section-hero {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.035));
 }
 
-.date-card {
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.date-card-header span,
-.suggestion-group-title,
 .sheet-context {
   color: var(--muted);
   font-size: 0.76rem;
 }
 
 .section-heading {
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
 .section-heading strong {
@@ -885,29 +991,30 @@ button {
 }
 
 .color-swatch {
-  width: 100%;
-  min-height: 54px;
-  border-radius: 18px;
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
   border: 2px solid transparent;
   display: inline-flex;
-  align-items: flex-end;
-  justify-content: flex-start;
-  padding: 10px;
-  color: #0f1218;
-  font-size: 0.68rem;
-  font-weight: 700;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.26);
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 8px 18px rgba(0, 0, 0, 0.14);
 }
 
 .color-swatch-active {
   border-color: #ffffff;
   box-shadow:
     0 0 0 1px rgba(255, 255, 255, 0.16),
+    0 0 0 5px rgba(255, 255, 255, 0.07),
     0 12px 26px rgba(0, 0, 0, 0.18);
 }
 
 .color-row-large {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(6, 42px);
+  justify-content: start;
 }
 
 .primary-button,
@@ -984,40 +1091,20 @@ button {
 }
 
 .sheet-fields {
-  padding: 0 16px 16px;
+  padding: 0 16px 14px;
   overflow-y: auto;
   align-content: start;
-  gap: 12px;
+  gap: 8px;
 }
 
 .sheet-footer {
-  padding: 12px 16px 18px;
+  padding: 10px 16px 14px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   background: rgba(10, 12, 17, 0.92);
   border-top: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.suggestions-row {
-  display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  padding-bottom: 2px;
-}
-
-.suggestion-pill {
-  white-space: nowrap;
-  min-height: 36px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--text);
-  padding: 0 14px;
-}
-
-.suggestion-group {
-  gap: 8px;
 }
 
 .sheet-header-copy {
@@ -1062,6 +1149,32 @@ button {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.weekday-pills {
+  display: grid;
+  grid-template-columns: repeat(5, 36px);
+  gap: 10px;
+  justify-content: start;
+}
+
+.weekday-pill {
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+}
+
+.weekday-pill-active {
+  background: rgba(241, 245, 249, 0.96);
+  border-color: rgba(241, 245, 249, 0.96);
+  color: #0f1218;
 }
 
 .settings-color-item {
@@ -1117,9 +1230,9 @@ button {
 }
 
 .sheet-large {
-  height: 78%;
-  border-top-left-radius: 30px;
-  border-top-right-radius: 30px;
+  height: 100%;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
 }
 
 .color-library {
@@ -1190,7 +1303,11 @@ button {
 
   .date-section-grid,
   .color-row-large {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(5, 42px);
+  }
+
+  .weekday-pills {
+    gap: 8px;
   }
 
   .sheet-fields {

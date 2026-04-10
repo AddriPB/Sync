@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { CalendarDays, Clock3, Grid2x2, MapPin, Plus, Settings2, Trash2, X } from "lucide-react";
-import { format, isSameMonth, isToday as isTodayDateFns, parseISO, startOfWeek } from "date-fns";
+import { CalendarDays, Clock3, Grid2x2, MapPin, Plus, Settings2, Trash2 } from "lucide-react";
+import { format, getISOWeek, isSameMonth, isToday as isTodayDateFns, parseISO } from "date-fns";
 import { fr } from "date-fns/locale";
 import { COLOR_LIBRARY, getColorPresetById } from "@/lib/colors";
 import {
@@ -13,6 +13,7 @@ import {
   getMonthGrid,
   getPlanningDays,
   getWeekDays,
+  isOnSiteDate,
   MINUTE_OPTIONS,
   moveAnchor,
   sortEvents,
@@ -20,7 +21,6 @@ import {
   timeStringToMinutes,
   todayIso
 } from "@/lib/date";
-import { fetchLocationSuggestions } from "@/lib/location";
 import {
   addColorPreset,
   deleteEvent,
@@ -28,7 +28,7 @@ import {
   getDefaultEventForm,
   getEvents,
   getOnSiteDates,
-  getRememberedLocations,
+  getOnSiteWeekdays,
   getSession,
   observeSession,
   removeColorPreset,
@@ -37,14 +37,14 @@ import {
   signOut,
   signUp,
   toEventFormValues,
-  toggleOnSiteDate
+  toggleOnSiteDate,
+  toggleOnSiteWeekday
 } from "@/lib/storage";
 import type {
   CalendarEvent,
   CalendarView,
   ColorPreset,
   EventFormValues,
-  LocationSuggestion,
   Session
 } from "@/lib/types";
 
@@ -59,6 +59,13 @@ const DAY_END_MINUTES = 24 * 60;
 const DAY_RANGE_MINUTES = DAY_END_MINUTES - DAY_START_MINUTES;
 const WEEK_HEADER_HEIGHT = 42;
 const WEEK_TIMED_TOP_GAP = 2;
+const ON_SITE_WEEKDAY_OPTIONS = [
+  { label: "L", value: 1 },
+  { label: "M", value: 2 },
+  { label: "M", value: 3 },
+  { label: "J", value: 4 },
+  { label: "V", value: 5 }
+] as const;
 
 const navItems: Array<{ id: CalendarView; label: string; icon: typeof Clock3 }> = [
   { id: "planning", label: "Planning", icon: Clock3 },
@@ -77,6 +84,7 @@ export function SyncApp() {
   const [createDraft, setCreateDraft] = useState<EventFormValues | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [onSiteDates, setOnSiteDates] = useState<string[]>([]);
+  const [onSiteWeekdays, setOnSiteWeekdays] = useState<number[]>([]);
   const [colorPresets, setColorPresets] = useState<ColorPreset[]>([]);
   const swipeStart = useRef<{ x: number; y: number } | null>(null);
   const animationResetRef = useRef<number | null>(null);
@@ -124,13 +132,15 @@ export function SyncApp() {
     if (!userId) {
       return;
     }
-    const [nextEvents, nextOnSiteDates, nextColorPresets] = await Promise.all([
+    const [nextEvents, nextOnSiteDates, nextOnSiteWeekdays, nextColorPresets] = await Promise.all([
       getEvents(userId),
       getOnSiteDates(userId),
+      getOnSiteWeekdays(userId),
       getColorPresets(userId)
     ]);
     setEvents(sortEvents(nextEvents));
     setOnSiteDates(nextOnSiteDates);
+    setOnSiteWeekdays(nextOnSiteWeekdays);
     setColorPresets(nextColorPresets);
   }
 
@@ -144,6 +154,7 @@ export function SyncApp() {
     setSession(null);
     setEvents([]);
     setOnSiteDates([]);
+    setOnSiteWeekdays([]);
     setColorPresets([]);
     setShowComposer(false);
     setShowSettings(false);
@@ -203,6 +214,24 @@ export function SyncApp() {
     }
   }
 
+  async function handleToggleOnSiteWeekday(weekday: number) {
+    if (!session) {
+      return;
+    }
+    const optimisticWeekdays = onSiteWeekdays.includes(weekday)
+      ? onSiteWeekdays.filter((entry) => entry !== weekday)
+      : [...onSiteWeekdays, weekday].sort((a, b) => a - b);
+
+    setOnSiteWeekdays(optimisticWeekdays);
+
+    try {
+      const nextWeekdays = await toggleOnSiteWeekday(session.userId, weekday);
+      setOnSiteWeekdays(nextWeekdays);
+    } catch {
+      setOnSiteWeekdays(onSiteWeekdays);
+    }
+  }
+
   function shift(direction: -1 | 1) {
     if (view === "planning") {
       return;
@@ -251,6 +280,9 @@ export function SyncApp() {
       <section className="phone-frame">
         <header className="topbar">
           <div className="topbar-title">
+            <button className="icon-button today-nav-button" onClick={() => setSelectedDate(todayIso())} aria-label="Aujourd'hui">
+              <CalendarDays size={16} />
+            </button>
             <h1>{getTopbarTitle(view, selectedDate)}</h1>
           </div>
           <div className="topbar-actions">
@@ -268,6 +300,7 @@ export function SyncApp() {
               onSelectDate={setSelectedDate}
               onEditEvent={handleEdit}
               onSiteDates={onSiteDates}
+              onSiteWeekdays={onSiteWeekdays}
               onToggleOnSite={handleToggleOnSite}
               colorPresets={colorPresets}
             />
@@ -283,6 +316,7 @@ export function SyncApp() {
                 onCreateEvent={handleCreate}
                 onEditEvent={handleEdit}
                 onSiteDates={onSiteDates}
+                onSiteWeekdays={onSiteWeekdays}
                 onToggleOnSite={handleToggleOnSite}
                 colorPresets={colorPresets}
               />
@@ -299,6 +333,7 @@ export function SyncApp() {
                 onSelectDate={setSelectedDate}
                 onEditEvent={handleEdit}
                 onSiteDates={onSiteDates}
+                onSiteWeekdays={onSiteWeekdays}
                 onToggleOnSite={handleToggleOnSite}
                 colorPresets={colorPresets}
               />
@@ -344,7 +379,6 @@ export function SyncApp() {
         {showComposer ? (
           <EventSheet
             mode={selectedEvent ? "edit" : "create"}
-            currentUserId={session.userId}
             colorPresets={colorPresets}
             initialValues={composerDefaults}
             event={selectedEvent}
@@ -361,9 +395,10 @@ export function SyncApp() {
         {showSettings ? (
           <SettingsSheet
             colorPresets={colorPresets}
-            username={session.username}
+            onSiteWeekdays={onSiteWeekdays}
             onClose={() => setShowSettings(false)}
             onSignOut={handleSignOut}
+            onToggleOnSiteWeekday={handleToggleOnSiteWeekday}
             onAddColor={(preset) => {
               if (!session) {
                 return;
@@ -394,8 +429,10 @@ function getTopbarTitle(view: CalendarView, selectedDate: string) {
     return "Agenda";
   }
   if (view === "week") {
-    const weekStart = startOfWeek(parsed, { weekStartsOn: 1 });
-    return `Semaine du ${format(weekStart, "d MMM", { locale: fr })}`;
+    const weekNumber = getISOWeek(parsed);
+    const month = format(parsed, "MMMM", { locale: fr });
+    const monthLabel = month.slice(0, 1).toUpperCase() + month.slice(1);
+    return `Semaine ${weekNumber} (${monthLabel})`;
   }
   return formatMonthTitle(parsed);
 }
@@ -614,6 +651,7 @@ function PlanningView({
   onSelectDate,
   onEditEvent,
   onSiteDates,
+  onSiteWeekdays,
   onToggleOnSite,
   colorPresets
 }: {
@@ -622,6 +660,7 @@ function PlanningView({
   onSelectDate: (date: string) => void;
   onEditEvent: (event: CalendarEvent) => void;
   onSiteDates: string[];
+  onSiteWeekdays: number[];
   onToggleOnSite: (date: string) => void;
   colorPresets: ColorPreset[];
 }) {
@@ -643,7 +682,7 @@ function PlanningView({
           date={group.date}
           events={group.events}
           active={selectedDate === group.date}
-          onSite={onSiteDates.includes(group.date)}
+          onSite={isOnSiteDate(group.date, onSiteDates, onSiteWeekdays)}
           onSelectDate={onSelectDate}
           onEditEvent={onEditEvent}
           onToggleOnSite={onToggleOnSite}
@@ -678,7 +717,7 @@ function PlanningDayCard({
 
   return (
     <article
-      className={getDaySurfaceClass("planning-day", active, onSite, longPress.isPressing)}
+      className={`${getDaySurfaceClass("planning-day", active, onSite, longPress.isPressing)}${isToday ? " planning-day-today" : ""}`}
       onClickCapture={(event) => {
         if (longPress.shouldSuppressClick()) {
           event.preventDefault();
@@ -695,14 +734,11 @@ function PlanningDayCard({
     >
       <header className="planning-day-header">
         <div className="planning-day-title">
-          <div className="planning-day-title-main">
-            <p>{formatDayLabel(date)}</p>
-            <div className="planning-day-badges">
-              {isToday ? <span className="info-badge info-badge-strong">Aujourd'hui</span> : null}
-              {onSite ? <span className="info-badge">Sur site</span> : null}
-            </div>
+          <p>{formatDayLabel(date)}</p>
+          <div className="planning-day-badges">
+            {onSite ? <span className="info-badge">Sur site</span> : null}
+            <span>{events.length} événement{events.length > 1 ? "s" : ""}</span>
           </div>
-          <span>{events.length} événement{events.length > 1 ? "s" : ""}</span>
         </div>
       </header>
       <div className="planning-list">
@@ -749,6 +785,7 @@ function WeekView({
   onCreateEvent,
   onEditEvent,
   onSiteDates,
+  onSiteWeekdays,
   onToggleOnSite,
   colorPresets
 }: {
@@ -757,10 +794,14 @@ function WeekView({
   onCreateEvent: (defaults?: Partial<EventFormValues>) => void;
   onEditEvent: (event: CalendarEvent) => void;
   onSiteDates: string[];
+  onSiteWeekdays: number[];
   onToggleOnSite: (date: string) => void;
   colorPresets: ColorPreset[];
 }) {
   const days = getWeekDays(selectedDate);
+  const multiDayEvents = events.filter((event) => event.endDate > event.startDate);
+  const multiDayLayouts = getWeekMultiDayLayouts(multiDayEvents, days);
+  const multiDayReserve = getWeekMultiDayReserve(multiDayLayouts);
 
   return (
     <section className="week-view">
@@ -772,25 +813,51 @@ function WeekView({
             </div>
           ))}
         </div>
-        <div className="week-columns">
-          {days.map((day) => {
-            const dateKey = format(day, "yyyy-MM-dd");
-            const dayEvents = events.filter((event) => spansOnDay(event, day));
-            return (
-              <WeekDayColumn
-                key={dateKey}
-                date={day}
+        <div className="week-columns-board">
+          <div className="week-columns">
+            {days.map((day) => {
+              const dateKey = format(day, "yyyy-MM-dd");
+              const dayEvents = events.filter((event) => spansOnDay(event, day) && event.startDate === event.endDate);
+              return (
+                <WeekDayColumn
+                  key={dateKey}
+                  date={day}
                 dateKey={dateKey}
                 events={dayEvents}
                 active={selectedDate === dateKey}
-                onSite={onSiteDates.includes(dateKey)}
-                onCreateEvent={onCreateEvent}
-                onEditEvent={onEditEvent}
-                onToggleOnSite={onToggleOnSite}
-                colorPresets={colorPresets}
-              />
-            );
-          })}
+                onSite={isOnSiteDate(dateKey, onSiteDates, onSiteWeekdays)}
+                  onCreateEvent={onCreateEvent}
+                  onEditEvent={onEditEvent}
+                  onToggleOnSite={onToggleOnSite}
+                  colorPresets={colorPresets}
+                  multiDayReserve={multiDayReserve}
+                />
+              );
+            })}
+          </div>
+          {multiDayLayouts.length > 0 ? (
+            <div className="week-spans-layer">
+              {multiDayLayouts.map(({ event, style }) => {
+                const color = getColorPresetById(event.colorId, colorPresets);
+                return (
+                  <button
+                    key={`week-span-${event.id}-${style.top}-${style.left}`}
+                    className="week-span-block"
+                    style={{
+                      ...style,
+                      background: color.bg,
+                      borderColor: color.border,
+                      color: color.fg
+                    }}
+                    onClick={() => onEditEvent(event)}
+                  >
+                    <strong>{event.title}</strong>
+                    <span>{formatDaySpan(event)}</span>
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
         </div>
       </div>
     </section>
@@ -806,7 +873,8 @@ function WeekDayColumn({
   onCreateEvent,
   onEditEvent,
   onToggleOnSite,
-  colorPresets
+  colorPresets,
+  multiDayReserve
 }: {
   date: Date;
   dateKey: string;
@@ -817,10 +885,10 @@ function WeekDayColumn({
   onEditEvent: (event: CalendarEvent) => void;
   onToggleOnSite: (date: string) => void;
   colorPresets: ColorPreset[];
+  multiDayReserve: number;
 }) {
   const longPress = useLongPressAction(() => onToggleOnSite(dateKey));
-  const layouts = getWeekEventLayouts(events, dateKey);
-  const totalEvents = events.length;
+  const layouts = getWeekEventLayouts(events, dateKey, multiDayReserve);
 
   return (
     <article
@@ -845,7 +913,6 @@ function WeekDayColumn({
           <span>{formatShortDay(date)}</span>
           <strong className={isTodayDateFns(date) ? "today-chip" : ""}>{format(date, "d")}</strong>
         </div>
-        {totalEvents > 0 ? <span className="week-column-count">{totalEvents}</span> : null}
       </div>
       <div className="week-grid-lines">
         {WEEK_HOURS.map((hour) => (
@@ -887,6 +954,7 @@ function MonthView({
   onSelectDate,
   onEditEvent,
   onSiteDates,
+  onSiteWeekdays,
   onToggleOnSite,
   colorPresets
 }: {
@@ -895,32 +963,60 @@ function MonthView({
   onSelectDate: (date: string) => void;
   onEditEvent: (event: CalendarEvent) => void;
   onSiteDates: string[];
+  onSiteWeekdays: number[];
   onToggleOnSite: (date: string) => void;
   colorPresets: ColorPreset[];
 }) {
   const days = getMonthGrid(selectedDate);
   const selectedEvents = events.filter((event) => selectedDate >= event.startDate && selectedDate <= event.endDate);
+  const multiDayLayouts = getMonthMultiDayLayouts(events.filter((event) => event.endDate > event.startDate), days);
+  const monthMultiDayReserve = getMonthMultiDayReserve(multiDayLayouts);
 
   return (
     <section className="month-view">
-      <div className="month-grid">
-        {days.map((day) => {
-          const dateKey = format(day, "yyyy-MM-dd");
-          const dayEvents = events.filter((event) => spansOnDay(event, day));
-          return (
-            <MonthCell
-              key={dateKey}
-              day={day}
-              dateKey={dateKey}
-              dayEvents={dayEvents}
-              selectedDate={selectedDate}
-              onSite={onSiteDates.includes(dateKey)}
-              onSelectDate={onSelectDate}
-              onToggleOnSite={onToggleOnSite}
-              colorPresets={colorPresets}
-            />
-          );
-        })}
+      <div className="month-grid-board" style={{ "--month-span-reserve": `${monthMultiDayReserve}px` } as CSSProperties}>
+        <div className="month-grid">
+          {days.map((day) => {
+            const dateKey = format(day, "yyyy-MM-dd");
+            const dayEvents = events.filter((event) => spansOnDay(event, day) && event.startDate === event.endDate);
+            return (
+              <MonthCell
+                key={dateKey}
+                day={day}
+                dateKey={dateKey}
+                dayEvents={dayEvents}
+                selectedDate={selectedDate}
+                onSite={isOnSiteDate(dateKey, onSiteDates, onSiteWeekdays)}
+                onSelectDate={onSelectDate}
+                onToggleOnSite={onToggleOnSite}
+                colorPresets={colorPresets}
+              />
+            );
+          })}
+        </div>
+        {multiDayLayouts.length > 0 ? (
+          <div className="month-spans-layer">
+            {multiDayLayouts.map(({ event, style, segmentKey }) => {
+              const color = getColorPresetById(event.colorId, colorPresets);
+              return (
+                <button
+                  key={`month-span-${event.id}-${segmentKey}`}
+                  className="month-span-block"
+                  style={{
+                    ...style,
+                    background: color.bg,
+                    borderColor: color.border,
+                    color: color.fg
+                  }}
+                  onClick={() => onEditEvent(event)}
+                >
+                  <span className="month-span-accent" style={{ background: color.border }} />
+                  <strong>{event.title}</strong>
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
       </div>
 
       <div className="month-detail">
@@ -929,7 +1025,6 @@ function MonthView({
             <p>{formatDayLabel(selectedDate)}</p>
             <span>{selectedEvents.length} événement{selectedEvents.length > 1 ? "s" : ""}</span>
           </div>
-          <span className="info-badge info-badge-strong">{format(parseISO(selectedDate), "d MMM", { locale: fr })}</span>
         </header>
         <div className="month-detail-list month-detail-scroll">
           {selectedEvents.map((event) => {
@@ -1008,7 +1103,6 @@ function MonthCell({
     >
       <div className="month-cell-head">
         <span className={isTodayDateFns(day) ? "today-chip" : "month-date"}>{format(day, "d")}</span>
-        {dayEvents.length > 0 ? <span className="month-cell-count">{dayEvents.length}</span> : null}
       </div>
       <div className="month-previews">
         {visibleEvents.map((event) => {
@@ -1028,7 +1122,6 @@ function MonthCell({
 
 function EventSheet({
   mode,
-  currentUserId,
   colorPresets,
   initialValues,
   event,
@@ -1037,7 +1130,6 @@ function EventSheet({
   onSave
 }: {
   mode: "create" | "edit";
-  currentUserId: string;
   colorPresets: ColorPreset[];
   initialValues: EventFormValues;
   event: CalendarEvent | null;
@@ -1048,8 +1140,6 @@ function EventSheet({
   const [values, setValues] = useState<EventFormValues>(initialValues);
   const [endDateTouched, setEndDateTouched] = useState(mode === "edit");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [historySuggestions, setHistorySuggestions] = useState<LocationSuggestion[]>([]);
-  const [remoteSuggestions, setRemoteSuggestions] = useState<LocationSuggestion[]>([]);
   const [saving, setSaving] = useState(false);
   const [submitError, setSubmitError] = useState("");
 
@@ -1058,28 +1148,6 @@ function EventSheet({
     setEndDateTouched(mode === "edit");
     setSubmitError("");
   }, [initialValues, mode]);
-
-  useEffect(() => {
-    void getRememberedLocations(currentUserId).then((locations) => {
-      const history = locations
-        .filter((entry) => entry.toLowerCase().includes(values.location.toLowerCase()))
-        .map((entry) => ({
-          id: `history-${entry}`,
-          label: entry,
-          source: "history" as const
-        }));
-      setHistorySuggestions(history);
-    });
-  }, [currentUserId, values.location]);
-
-  useEffect(() => {
-    const timeout = window.setTimeout(async () => {
-      const suggestions = await fetchLocationSuggestions(values.location);
-      setRemoteSuggestions(suggestions);
-    }, 250);
-
-    return () => window.clearTimeout(timeout);
-  }, [values.location]);
 
   function patch(next: Partial<EventFormValues>) {
     setValues((current) => {
@@ -1101,11 +1169,8 @@ function EventSheet({
   };
 
   const canSubmit = !errors.title && !errors.startDate && !errors.endDate;
-  const suggestions = [...historySuggestions, ...remoteSuggestions].slice(0, 6);
   const readonlyExternal = event ? event.source !== "sync" : false;
   const sheetDismiss = useSheetDismiss(onClose);
-  const historySuggestionsOnly = suggestions.filter((suggestion) => suggestion.source === "history");
-  const remoteSuggestionsOnly = suggestions.filter((suggestion) => suggestion.source === "nominatim");
 
   async function handleSubmit() {
     if (!canSubmit || readonlyExternal || saving) {
@@ -1134,12 +1199,7 @@ function EventSheet({
             <h2>{readonlyExternal ? "Lecture seule" : mode === "create" ? "Créer un événement" : "Modifier l'événement"}</h2>
             <p className="sheet-context">{formatEventRangeSummary(values)}</p>
           </div>
-          <div className="sheet-header-actions">
-            {readonlyExternal ? <span className="readonly-badge">Lecture seule</span> : null}
-            <button className="icon-button" onClick={onClose} aria-label="Fermer">
-              <X size={18} />
-            </button>
-          </div>
+          {readonlyExternal ? <span className="readonly-badge">Lecture seule</span> : null}
         </header>
 
         <div className="sheet-fields">
@@ -1176,89 +1236,50 @@ function EventSheet({
               <p className="eyebrow">Date et heure</p>
               <strong>Quand</strong>
             </div>
-            <div className="date-section-grid">
-              <div className="date-card">
-                <div className="date-card-header">
-                  <span>Début</span>
-                </div>
-                <label className="field">
-                  <span>Date</span>
-                  <input
-                    type="date"
-                    value={values.startDate}
-                    onChange={(inputEvent) => patch({ startDate: inputEvent.target.value })}
-                    disabled={readonlyExternal}
-                  />
-                </label>
-                {!values.allDay ? (
-                  <label className="field">
-                    <span>Heure</span>
+            <div className="date-compact-grid">
+              <label className="field field-compact">
+                <span>Début date</span>
+                <input
+                  type="date"
+                  value={values.startDate}
+                  onChange={(inputEvent) => patch({ startDate: inputEvent.target.value })}
+                  disabled={readonlyExternal}
+                />
+              </label>
+              <label className="field field-compact">
+                <span>Fin date</span>
+                <input
+                  type="date"
+                  value={values.endDate}
+                  onChange={(inputEvent) => {
+                    setEndDateTouched(true);
+                    patch({ endDate: inputEvent.target.value });
+                  }}
+                  disabled={readonlyExternal}
+                />
+              </label>
+              {!values.allDay ? (
+                <>
+                  <label className="field field-compact">
+                    <span>Début heure</span>
                     <TimeSelect value={values.startTime} onChange={(time) => patch({ startTime: time })} disabled={readonlyExternal} />
                   </label>
-                ) : null}
-              </div>
-
-              <div className="date-card">
-                <div className="date-card-header">
-                  <span>Fin</span>
-                </div>
-                <label className="field">
-                  <span>Date</span>
-                  <input
-                    type="date"
-                    value={values.endDate}
-                    onChange={(inputEvent) => {
-                      setEndDateTouched(true);
-                      patch({ endDate: inputEvent.target.value });
-                    }}
-                    disabled={readonlyExternal}
-                  />
-                </label>
-                {!values.allDay ? (
-                  <label className="field">
-                    <span>Heure</span>
+                  <label className="field field-compact">
+                    <span>Fin heure</span>
                     <TimeSelect value={values.endTime} onChange={(time) => patch({ endTime: time })} disabled={readonlyExternal} />
                   </label>
-                ) : null}
-              </div>
+                </>
+              ) : null}
             </div>
           </section>
 
           <section className="sheet-section">
             <div className="section-heading">
-              <p className="eyebrow">Lieu</p>
-              <strong>Où</strong>
+              <strong>Lieu</strong>
             </div>
             <label className="field">
-              <span>Lieu</span>
               <input value={values.location} onChange={(inputEvent) => patch({ location: inputEvent.target.value })} placeholder="Ajouter un lieu" disabled={readonlyExternal} />
             </label>
-
-            {!readonlyExternal && historySuggestionsOnly.length > 0 ? (
-              <div className="suggestion-group">
-                <span className="suggestion-group-title">Récents</span>
-                <div className="suggestions-row">
-                  {historySuggestionsOnly.map((suggestion) => (
-                    <button key={suggestion.id} className="suggestion-pill" onClick={() => patch({ location: suggestion.label })}>
-                      {suggestion.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-
-            {!readonlyExternal && remoteSuggestionsOnly.length > 0 ? (
-              <div className="suggestion-group">
-                <span className="suggestion-group-title">Suggestions</span>
-                <div className="suggestions-row">
-                  {remoteSuggestionsOnly.map((suggestion) => (
-                    <button key={suggestion.id} className="suggestion-pill" onClick={() => patch({ location: suggestion.label })}>
-                      {suggestion.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : null}
           </section>
 
           <section className="sheet-section">
@@ -1271,13 +1292,11 @@ function EventSheet({
                 <button
                   key={preset.id}
                   className={values.colorId === preset.id ? "color-swatch color-swatch-active" : "color-swatch"}
-                  style={{ background: preset.border }}
+                  style={{ background: preset.bg, borderColor: preset.border, color: preset.fg }}
                   onClick={() => patch({ colorId: preset.id })}
                   aria-label={preset.label}
                   disabled={readonlyExternal}
-                >
-                  <span>{preset.label}</span>
-                </button>
+                />
               ))}
             </div>
           </section>
@@ -1337,16 +1356,18 @@ function TimeSelect({
 
 function SettingsSheet({
   colorPresets,
-  username,
+  onSiteWeekdays,
   onClose,
   onSignOut,
+  onToggleOnSiteWeekday,
   onAddColor,
   onRemoveColor
 }: {
   colorPresets: ColorPreset[];
-  username: string;
+  onSiteWeekdays: number[];
   onClose: () => void;
   onSignOut: () => void;
+  onToggleOnSiteWeekday: (weekday: number) => void;
   onAddColor: (preset: ColorPreset) => void;
   onRemoveColor: (colorId: string) => void;
 }) {
@@ -1363,14 +1384,33 @@ function SettingsSheet({
           </div>
           <div>
             <p className="eyebrow">Paramétrages</p>
-            <h2>@{username}</h2>
+            <h2>Utilisateur</h2>
           </div>
-          <button className="icon-button" onClick={onClose} aria-label="Fermer">
-            <X size={18} />
-          </button>
         </header>
 
         <div className="sheet-fields">
+          <div className="settings-card">
+            <div className="settings-card-head">
+              <div>
+                <h3>Sur site</h3>
+                <p>Jours appliqués automatiquement sur toutes les vues.</p>
+              </div>
+            </div>
+            <div className="weekday-pills">
+              {ON_SITE_WEEKDAY_OPTIONS.map((option) => (
+                <button
+                  key={`${option.label}-${option.value}`}
+                  className={onSiteWeekdays.includes(option.value) ? "weekday-pill weekday-pill-active" : "weekday-pill"}
+                  onClick={() => onToggleOnSiteWeekday(option.value)}
+                  type="button"
+                  aria-pressed={onSiteWeekdays.includes(option.value)}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="settings-card">
             <div className="settings-card-head">
               <div>
@@ -1487,9 +1527,6 @@ function ColorLibrarySheet({
             <p className="eyebrow">Palette</p>
             <h2>Ajouter une couleur</h2>
           </div>
-          <button className="icon-button" onClick={onClose} aria-label="Fermer">
-            <X size={18} />
-          </button>
         </header>
         <div className="color-library">
           {COLOR_LIBRARY.map((preset) => {
@@ -1540,8 +1577,8 @@ function minutesToTimeString(totalMinutes: number) {
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
 }
 
-function getWeekEventLayouts(events: CalendarEvent[], dateKey: string) {
-  const allDayEvents = events.filter((event) => event.allDay || event.startDate !== dateKey || event.endDate !== dateKey);
+function getWeekEventLayouts(events: CalendarEvent[], dateKey: string, multiDayReserve = 0) {
+  const allDayEvents = events.filter((event) => event.allDay);
   const timedEvents = events
     .filter((event) => !allDayEvents.includes(event))
     .map((event) => {
@@ -1556,7 +1593,8 @@ function getWeekEventLayouts(events: CalendarEvent[], dateKey: string) {
     })
     .sort((a, b) => a.startMinutes - b.startMinutes || a.endMinutes - b.endMinutes);
 
-  const allDayReserve = allDayEvents.length > 0 ? Math.min(18, 6 + allDayEvents.length * 4) : 0;
+  const localAllDayReserve = allDayEvents.length > 0 ? Math.min(18, 6 + allDayEvents.length * 4) : 0;
+  const allDayReserve = Math.min(30, multiDayReserve + localAllDayReserve);
   const allDayLayouts = allDayEvents.map((event, index) => ({
     event,
     density: "balanced" as const,
@@ -1637,4 +1675,140 @@ function formatEventRangeSummary(values: EventFormValues) {
   }
 
   return `${format(start, "d MMM", { locale: fr })} ${values.startTime || "--:--"} - ${format(end, "d MMM", { locale: fr })} ${values.endTime || "--:--"}`;
+}
+
+function getWeekMultiDayLayouts(events: CalendarEvent[], days: Date[]) {
+  if (days.length === 0) {
+    return [];
+  }
+
+  const weekStart = format(days[0], "yyyy-MM-dd");
+  const weekEnd = format(days[days.length - 1], "yyyy-MM-dd");
+  const segments = events
+    .filter((event) => event.startDate <= weekEnd && event.endDate >= weekStart)
+    .map((event) => ({
+      event,
+      startIndex: Math.max(0, days.findIndex((day) => format(day, "yyyy-MM-dd") >= event.startDate)),
+      endIndex: Math.min(
+        days.length - 1,
+        days.length -
+          1 -
+          [...days]
+            .reverse()
+            .findIndex((day) => format(day, "yyyy-MM-dd") <= event.endDate)
+      )
+    }))
+    .sort((a, b) => a.startIndex - b.startIndex || a.endIndex - b.endIndex);
+
+  const lanes: number[] = [];
+
+  return segments.map((segment) => {
+    let lane = 0;
+    while ((lanes[lane] ?? -1) >= segment.startIndex) {
+      lane += 1;
+    }
+    lanes[lane] = segment.endIndex;
+
+    const dayWidth = 100 / days.length;
+    return {
+      event: segment.event,
+      lane,
+      style: {
+        top: `${lane * 5.8}%`,
+        left: `calc(${segment.startIndex * dayWidth}% + 4px)`,
+        width: `calc(${(segment.endIndex - segment.startIndex + 1) * dayWidth}% - 8px)`
+      } satisfies CSSProperties
+    };
+  });
+}
+
+function getWeekMultiDayReserve(layouts: Array<{ lane: number }>) {
+  if (layouts.length === 0) {
+    return 0;
+  }
+  const maxLane = Math.max(...layouts.map((layout) => layout.lane));
+  return Math.min(22, 7 + (maxLane + 1) * 6);
+}
+
+function getMonthMultiDayLayouts(events: CalendarEvent[], days: Date[]) {
+  if (days.length === 0) {
+    return [];
+  }
+
+  const gridStart = format(days[0], "yyyy-MM-dd");
+  const gridEnd = format(days[days.length - 1], "yyyy-MM-dd");
+  const segments: Array<{
+    event: CalendarEvent;
+    row: number;
+    startCol: number;
+    endCol: number;
+    lane: number;
+    segmentKey: string;
+  }> = [];
+  const laneEndsByRow = new Map<number, number[]>();
+
+  for (const event of events.filter((entry) => entry.startDate <= gridEnd && entry.endDate >= gridStart)) {
+    const clippedStart = days.findIndex((day) => format(day, "yyyy-MM-dd") >= event.startDate);
+    const clippedEnd =
+      days.length -
+      1 -
+      [...days]
+        .reverse()
+        .findIndex((day) => format(day, "yyyy-MM-dd") <= event.endDate);
+
+    let index = Math.max(0, clippedStart);
+    const endIndex = Math.min(days.length - 1, clippedEnd);
+
+    while (index <= endIndex) {
+      const row = Math.floor(index / 7);
+      const rowEndIndex = row * 7 + 6;
+      const segmentEnd = Math.min(endIndex, rowEndIndex);
+      const startCol = index % 7;
+      const endCol = segmentEnd % 7;
+      const laneEnds = laneEndsByRow.get(row) ?? [];
+
+      let lane = 0;
+      while ((laneEnds[lane] ?? -1) >= startCol) {
+        lane += 1;
+      }
+      laneEnds[lane] = endCol;
+      laneEndsByRow.set(row, laneEnds);
+
+      segments.push({
+        event,
+        row,
+        startCol,
+        endCol,
+        lane,
+        segmentKey: `${row}-${startCol}-${endCol}`
+      });
+
+      index = segmentEnd + 1;
+    }
+  }
+
+  const rowCount = days.length / 7;
+  return segments.map((segment) => ({
+    event: segment.event,
+    lane: segment.lane,
+    segmentKey: segment.segmentKey,
+    style: {
+      top: `calc(${(segment.row * 100) / rowCount}% + ${26 + segment.lane * 18}px)`,
+      left: `calc(${(segment.startCol * 100) / 7}% + 4px)`,
+      width: `calc(${((segment.endCol - segment.startCol + 1) * 100) / 7}% - 8px)`
+    } satisfies CSSProperties
+  }));
+}
+
+function getMonthMultiDayReserve(layouts: Array<{ lane: number }>) {
+  if (layouts.length === 0) {
+    return 0;
+  }
+
+  const maxLane = Math.max(...layouts.map((layout) => layout.lane));
+  return 18 + (maxLane + 1) * 18;
+}
+
+function formatDaySpan(event: CalendarEvent) {
+  return `${format(parseISO(event.startDate), "d MMM", { locale: fr })} - ${format(parseISO(event.endDate), "d MMM", { locale: fr })}`;
 }
