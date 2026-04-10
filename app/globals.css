@@ -1184,6 +1184,7 @@ button {
   align-items: center;
   justify-content: center;
   font-weight: 700;
+  touch-action: manipulation;
 }
 
 .weekday-pill-active {

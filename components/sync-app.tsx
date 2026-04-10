@@ -453,6 +453,7 @@ function useLongPressAction(action: () => void) {
   }
 
   function start() {
+    if (pressStartedAt.current !== null) return;
     didLongPress.current = false;
     pressStartedAt.current = Date.now();
     setIsPressing(true);
@@ -939,7 +940,7 @@ function WeekDayColumn({
               }}
             >
               <strong>{event.title}</strong>
-              {density !== "compact" ? <span>{formatTimeRange(event)}</span> : null}
+              {density !== "compact" && !isAllDay ? <span>{formatTimeRange(event)}</span> : null}
               {density === "expanded" && event.location ? <small>{event.location}</small> : null}
             </button>
           );
